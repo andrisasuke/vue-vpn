@@ -2,6 +2,7 @@
 #include "Engine.hpp"
 #include "Network.hpp"
 #include "CoreConfig.hpp"
+#include "CoreError.hpp"
 #include "Connectivity.hpp"
 #include <atomic>
 #include <openssl/crypto.h>
@@ -122,6 +123,9 @@ struct Session {
                 if(canceled)break;
                 auto result=c->connect();
 #endif
+                std::optional<CoreFailure> failure;
+                if(result.error)failure=coreFailure(result.status,result.message,content,username,password);
+                wipe(result.message);
                 c->sampleTraffic();
                 {std::lock_guard<std::mutex> lock(mutex);client.reset();}
                 c.reset(); // close the transport before releasing its bypass routes
@@ -140,9 +144,9 @@ struct Session {
                     if(online&&!changed)wake.wait_for(lock,std::chrono::seconds(2),[&]{return canceled||!online||epoch!=generation.load();});
                     continue;
                 }
-                if(result.error&&code.empty()){
-                    code=result.status;error="OpenVPN connection failed ("+result.status+").";
-                    if(terminalEvent(result.status))break;
+                if(failure&&code.empty()){
+                    code=failure->code;error=failure->message;
+                    if(terminalEvent(code))break;
                 }
                 auto delay=retryDelay(attempts++);status="reconnecting";
                 wake.wait_for(lock,std::chrono::seconds(delay),[&]{return canceled||!online||epoch!=generation.load();});

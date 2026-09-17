@@ -13,6 +13,9 @@ std::map<std::string,unsigned> starts;
 std::string blocked,entered,transient,cleanupFailure,authFailure,reserveFailure,temporaryCleanup,transitionFailure;
 unsigned cleanups=0,temporaryFailures=0;
 bool releaseCleanup=false;
+std::string returnedFailure;
+openvpn::ClientAPI::Status returnedStatus;
+bool preciseFailure=false;
 }
 namespace vv {
 struct Network::Impl {};
@@ -30,7 +33,11 @@ void Network::teardown(const std::string &id,bool){
 }
 static openvpn::ClientAPI::Status testConnection(Session &s,uint64_t epoch){
     bool unavailable,auth,transition;
-    {std::lock_guard<std::mutex> lock(fakeMutex);++starts[s.profileId];auth=authFailure==s.profileId;unavailable=transient==s.profileId;transition=transitionFailure==s.profileId;if(transition)transitionFailure.clear();if(unavailable)transient.clear();fakeWake.notify_all();}
+    openvpn::ClientAPI::Status failure;bool precise=false;
+    {std::lock_guard<std::mutex> lock(fakeMutex);++starts[s.profileId];auth=authFailure==s.profileId;unavailable=transient==s.profileId;transition=transitionFailure==s.profileId;if(transition)transitionFailure.clear();if(unavailable)transient.clear();
+        if(returnedFailure==s.profileId){failure=returnedStatus;returnedFailure.clear();precise=preciseFailure;}
+        fakeWake.notify_all();}
+    if(failure.error){if(precise)s.setError("route_setup","Unable to add the VPN route.");return failure;}
     if(transition){
         s.setError("TUN_SETUP_FAILED","Interface changed during setup");
         s.environment(false);s.environment(true);return {};
@@ -55,7 +62,7 @@ static openvpn::ClientAPI::Status testConnection(Session &s,uint64_t epoch){
 static NSString *one=@"00000000-0000-4000-8000-000000000001";
 static NSString *two=@"00000000-0000-4000-8000-000000000002";
 static std::string str(NSString *s){return s.UTF8String;}
-static void reset(){std::lock_guard<std::mutex> lock(fakeMutex);starts.clear();blocked.clear();entered.clear();transient.clear();cleanupFailure.clear();authFailure.clear();reserveFailure.clear();temporaryCleanup.clear();transitionFailure.clear();cleanups=temporaryFailures=0;releaseCleanup=false;}
+static void reset(){std::lock_guard<std::mutex> lock(fakeMutex);starts.clear();blocked.clear();entered.clear();transient.clear();cleanupFailure.clear();authFailure.clear();reserveFailure.clear();temporaryCleanup.clear();transitionFailure.clear();returnedFailure.clear();returnedStatus={};preciseFailure=false;cleanups=temporaryFailures=0;releaseCleanup=false;}
 static void connect(vv::Engine &engine,NSString *id,NSString *address,NSString *sessionId=nil){
     engine.request(@{@"op":@"connect",@"profileId":id,@"sessionId":sessionId?:id,@"username":@"test",@"password":@"test-only",@"content":@"client\ndev tun\nremote vpn.example.test\n",@"profile":@{@"routingMode":@"selected",@"routes":@[@{@"address":address,@"prefix":@24}],@"dns":@{@"servers":@[],@"domains":@[]}}});
 }
@@ -191,4 +198,37 @@ static void trafficCounters(){
     assert([nextConnection.snapshot()[@"bytesOut"] unsignedLongLongValue]==0);
 }
 
-int main(){@autoreleasepool{readiness();twoSessions();responsiveCleanup();offlineAndCleanupErrors();cleanupRetryAfterWifiChange();terminalErrorsAndReservationOwnership();trafficCounters();std::cout<<"Engine lifecycle and per-profile traffic counter tests passed\n";}}
+static void returnedCoreErrors(){
+    for(auto label:{"","SSL_ERROR"}){
+        reset();{
+            {std::lock_guard<std::mutex> lock(fakeMutex);returnedFailure=str(one);returnedStatus.error=true;returnedStatus.status=label;returnedStatus.message="socket bind failed: Address already in use; password=test-only";}
+            vv::Engine engine;engine.environment(true);connect(engine,one,@"10.10.0.0");finished(engine,one,@"error");
+            auto snapshot=session(engine,one);
+            assert([snapshot[@"errorCode"] isEqual:*label?@"SSL_ERROR":@"OPENVPN_ERROR"]);
+            assert([snapshot[@"error"] containsString:@"Address already in use"]);
+            NSData *encoded=[NSJSONSerialization dataWithJSONObject:snapshot options:0 error:nil];
+            NSString *json=[[NSString alloc] initWithData:encoded encoding:NSUTF8StringEncoding];
+            assert(![json containsString:@"test-only"]&&![json containsString:@"()"]);
+            std::lock_guard<std::mutex> lock(fakeMutex);assert(starts[str(one)]==1&&cleanups>0);
+        }
+    }
+    reset();{
+        {std::lock_guard<std::mutex> lock(fakeMutex);returnedFailure=str(one);returnedStatus.error=true;}
+        vv::Engine engine;engine.environment(true);connect(engine,one,@"10.10.0.0");finished(engine,one,@"error");
+        assert([session(engine,one)[@"errorCode"] isEqual:@"OPENVPN_ERROR"]);
+        assert([session(engine,one)[@"error"] containsString:@"did not provide an error description"]);
+    }
+    reset();{
+        {std::lock_guard<std::mutex> lock(fakeMutex);returnedFailure=str(one);returnedStatus.error=true;returnedStatus.message="generic wrapper failure";preciseFailure=true;}
+        vv::Engine engine;engine.environment(true);connect(engine,one,@"10.10.0.0");finished(engine,one,@"error");
+        assert([session(engine,one)[@"errorCode"] isEqual:@"route_setup"]);
+        assert([session(engine,one)[@"error"] isEqual:@"Unable to add the VPN route."]);
+    }
+    reset();{
+        {std::lock_guard<std::mutex> lock(fakeMutex);returnedFailure=str(one);returnedStatus.error=true;returnedStatus.status="TRANSPORT_ERROR";returnedStatus.message="Network is unreachable";}
+        vv::Engine engine;engine.environment(true);connect(engine,one,@"10.10.0.0");started(one,2);
+        engine.request(@{@"op":@"disconnect",@"profileId":one});finished(engine,one);
+    }
+}
+
+int main(){@autoreleasepool{readiness();twoSessions();responsiveCleanup();offlineAndCleanupErrors();cleanupRetryAfterWifiChange();terminalErrorsAndReservationOwnership();trafficCounters();returnedCoreErrors();std::cout<<"Engine lifecycle, traffic counters, and safe connection diagnostics passed\n";}}

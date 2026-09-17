@@ -1,0 +1,80 @@
+diff --git a/openvpn/client/remotelist.hpp b/openvpn/client/remotelist.hpp
+index efd97be..cf0ce7f 100644
+--- a/openvpn/client/remotelist.hpp
++++ b/openvpn/client/remotelist.hpp
+@@ -649,7 +649,18 @@ class RemoteList : public RC<thread_unsafe_refcount>
+     // without raising an exception.
+     bool endpoint_available(std::string *server_host, std::string *server_port, Protocol *transport_protocol) const
+     {
+-        const Item &item = *list[item_index()];
++        Item &item = *list[item_index()];
++        // Numeric remotes already identify an endpoint. Do not send them through
++        // the system resolver (including again after reconnect/cache reset).
++        if (!item.res_addr_list_defined())
++        {
++            openvpn_io::error_code ec;
++            const auto address = openvpn_io::ip::make_address(item.actual_host(), ec);
++            if (!ec
++                && !(item.transport_protocol.is_ipv4() && address.is_v6())
++                && !(item.transport_protocol.is_ipv6() && address.is_v4()))
++                item.set_ip_addr(IP::Addr::from_asio(address));
++        }
+         if (server_host)
+             *server_host = item.actual_host();
+         if (server_port)
+@@ -664,13 +675,14 @@ class RemoteList : public RC<thread_unsafe_refcount>
+ 
+     // cache a list of DNS-resolved IP addresses
+     template <class EPRANGE>
+-    void set_endpoint_range(EPRANGE &endpoint_range)
++    bool set_endpoint_range(EPRANGE &endpoint_range)
+     {
+         Item &item = *list[item_index()];
+         auto rand = random ? rng.get() : nullptr;
+         std::size_t lifetime = enable_cache ? cache_lifetime : 0;
+         item.set_endpoint_range(endpoint_range, rand, lifetime);
+         index.reset_item_addr();
++        return endpoint_available(nullptr, nullptr, nullptr);
+     }
+ 
+     // get an endpoint for contacting server
+diff --git a/openvpn/transport/client/tcpcli.hpp b/openvpn/transport/client/tcpcli.hpp
+index 1cd7b66..5ad8787 100644
+--- a/openvpn/transport/client/tcpcli.hpp
++++ b/openvpn/transport/client/tcpcli.hpp
+@@ -271,7 +271,14 @@ class Client : public TransportClient, AsyncResolvableTCP
+             if (!error)
+             {
+                 // save resolved endpoint list in remote_list
+-                config->remote_list->set_endpoint_range(results);
++                if (!config->remote_list->set_endpoint_range(results))
++                {
++                    config->stats->error(Error::RESOLVE_ERROR);
++                    stop();
++                    parent->transport_error(Error::TRANSPORT_ERROR,
++                                            "DNS resolution returned no address matching the VPN transport protocol");
++                    return;
++                }
+                 start_connect_();
+             }
+             else
+diff --git a/openvpn/transport/client/udpcli.hpp b/openvpn/transport/client/udpcli.hpp
+index 3304beb..3511e92 100644
+--- a/openvpn/transport/client/udpcli.hpp
++++ b/openvpn/transport/client/udpcli.hpp
+@@ -259,7 +259,14 @@ class Client : public TransportClient, AsyncResolvableUDP
+             if (!error)
+             {
+                 // save resolved endpoint list in remote_list
+-                config->remote_list->set_endpoint_range(results);
++                if (!config->remote_list->set_endpoint_range(results))
++                {
++                    config->stats->error(Error::RESOLVE_ERROR);
++                    stop();
++                    parent->transport_error(Error::TRANSPORT_ERROR,
++                                            "DNS resolution returned no address matching the VPN transport protocol");
++                    return;
++                }
+                 start_connect_();
+             }
+             else

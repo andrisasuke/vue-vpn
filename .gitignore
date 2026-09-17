@@ -5,6 +5,7 @@ src-tauri/gen/
 native/build/
 vendor/
 artifacts/
+/design/
 __pycache__/
 .DS_Store
 .env

@@ -8,6 +8,7 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[1]
 COMMIT = "18edfae7e7fd8051c93bd4746ec69be91eb02dbb"
 CORE = ROOT / "vendor/openvpn3"
+PATCHES = ROOT / "native/patches"
 
 def run(*args, **kw):
     return subprocess.run(list(map(str, args)), check=True, cwd=ROOT, **kw)
@@ -19,6 +20,16 @@ def prepare():
     actual = run("git", "-C", CORE, "rev-parse", "HEAD", capture_output=True, text=True).stdout.strip()
     if actual != COMMIT:
         raise SystemExit("Unexpected OpenVPN Core commit. Remove vendor/openvpn3 and prepare again.")
+    # vendor/ is ignored; apply tracked fixes on fresh checkouts as well as local
+    # builds. A conflicting/stale patch must stop the build, never silently skip.
+    for patch in sorted(PATCHES.glob("*.patch")):
+        args = ["git", "-C", str(CORE), "apply"]
+        if subprocess.run(args + ["--reverse", "--check", str(patch)], capture_output=True).returncode == 0:
+            continue
+        check = subprocess.run(args + ["--check", str(patch)], capture_output=True, text=True)
+        if check.returncode:
+            raise SystemExit(f"Cannot apply OpenVPN Core patch {patch.name}:\n{check.stderr}")
+        run(*args, patch)
 
 def configure():
     prepare()
