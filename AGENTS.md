@@ -3,6 +3,7 @@
 ## Start here
 
 - Read `README.md` for setup, commands, supported behavior, and troubleshooting.
+- Keep `README.md` and `AGENTS.md` in English.
 - Check `git status --short --branch` before editing; preserve unrelated changes.
 - Read the relevant source/tests rather than treating migration notes as current
   implementation. `docs/NATIVE_MIGRATION.md` records visual baselines and past
