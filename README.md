@@ -4,6 +4,10 @@ Client OpenVPN pribadi untuk macOS Apple Silicon: **Swift/AppKit → Objective-C
 
 Implementasi memakai window 960 × 720, profil `.ovpn`, PIN/password dengan opsi Keychain, menu bar native, beberapa koneksi bersamaan, routing IPv4 per profil, dan DNS dari server VPN.
 
+UI Vue/TypeScript dan backend Rust/Tauri lama sudah dihapus. Nama aplikasi tetap
+VueVPN. Panduan coding agent ada di [AGENTS.md](AGENTS.md); riwayat migrasi dan
+batas hasil pengujian ada di [docs/NATIVE_MIGRATION.md](docs/NATIVE_MIGRATION.md).
+
 ## Menjalankan hasil build
 
 1. Salin `artifacts/VueVPN.app` ke `/Applications`.
@@ -59,12 +63,12 @@ Kegagalan permanen ditampilkan dengan **Retry helper update**, yang melanjutkan 
 - Route push dari server tidak menentukan mode routing: pengaturan pada VueVPN yang berlaku.
 - Menyimpan perubahan network pada profil aktif hanya me-reconnect profil tersebut.
 - IPv6 tidak diubah atau diblokir. Full tunnel berarti seluruh **IPv4**, dengan pengecualian transport VPN, alamat interface lokal/peer, dan route jaringan lokal yang lebih spesifik milik macOS. Tidak ada kill switch.
-- Reconnect dibatasi lima percobaan berturut-turut dengan backoff 2/4/8/16/30 detik; offline/sleep menunda percobaan. Kesalahan autentikasi, sertifikat, atau konfigurasi menghentikan retry.
+- Retry kegagalan koneksi biasa dibatasi lima percobaan dengan backoff 2/4/8/16/30 detik. Offline/sleep menunda percobaan; perubahan jaringan dan error jaringan sementara mereset hitungan, sehingga waktu menunggu pemulihan jaringan tidak dibatasi lima percobaan total. Kesalahan autentikasi, sertifikat, atau konfigurasi menghentikan retry.
 - Profil dengan framing kompresi lama (termasuk `comp-lzo no`) memakai mode kompatibilitas receive-only. VueVPN tidak mengompresi data keluar, tetapi dapat menerima data terkompresi dari server tersebut. Profil tanpa direktif kompresi tetap menggunakan mode `no`; `allow-compression no` selalu dihormati.
 
 ## Data lokal
 
-Profil disimpan di `~/Library/Application Support/com.vuevpn.desktop/profiles`, direktori `0700`, file `0600`. Sertifikat/key yang direferensikan file diimpor menjadi inline; file sumber tidak diubah. Metadata sinkronisasi Pritunl tidak disimpan. Password tidak ditulis ke JSON, log, atau localStorage.
+Profil disimpan di `~/Library/Application Support/com.vuevpn.desktop/profiles`, direktori `0700`, file `0600`. Sertifikat/key yang direferensikan file diimpor menjadi inline; file sumber tidak diubah. Metadata sinkronisasi Pritunl tidak disimpan. Password tidak ditulis ke JSON atau log. Preferences tampilan memakai UserDefaults, terpisah dari credential Keychain.
 
 Password yang diingat menggunakan macOS Keychain dengan service `com.vuevpn.desktop.credentials`. **Forget password** menghapusnya. Password yang ditolak server dihapus agar koneksi berikutnya meminta input ulang. Tanpa remember, credential hanya dipertahankan dalam memori untuk reconnect sesi tersebut.
 
@@ -72,9 +76,23 @@ Helper berjalan terpisah dengan hak administrator. Komunikasi XPC memerlukan sig
 
 ## Development dan build
 
-Prasyarat: Apple Silicon, macOS 26+, Xcode 26 dengan Swift 6, Python 3,
+Jalankan seluruh perintah dari root repository. Prasyarat: Apple Silicon,
+macOS 26+, Xcode 26 lengkap dengan Swift 6 dan macOS SDK, Python 3,
 CMake, Asio, OpenSSL 3, dan LZ4. Build script mencari dependency Homebrew di
 `/opt/homebrew`. Node.js, npm, Rust, Tauri, WebView, dan OpenVPN CLI tidak diperlukan.
+
+Contoh menggunakan `rtk proxy`, wrapper CLI di workspace pengembang. RTK bukan
+dependency aplikasi atau build script. Jika RTK tidak terpasang, jalankan perintah
+yang sama tanpa awalan `rtk proxy`.
+
+Pastikan developer directory menunjuk ke Xcode lengkap, bukan hanya Command Line
+Tools. Periksa toolchain sebelum build:
+
+```sh
+rtk proxy xcode-select -p
+rtk proxy xcodebuild -version
+rtk proxy python3 --version
+```
 
 Siapkan dependency jika belum tersedia:
 
@@ -84,7 +102,9 @@ rtk proxy python3 scripts/native.py prepare
 ```
 
 OpenVPN Core dipin ke commit dalam `scripts/native.py`; patch endpoint IPv4
-tetap diterapkan oleh script. File vendor tidak dicommit.
+diterapkan dari `native/patches/`. Prepare pertama memerlukan akses jaringan untuk
+mengunduh source. Perintah build/test native juga menjalankan prepare dan
+memeriksa pin serta patch. File vendor tidak dicommit.
 
 Build Release beserta helper dan seluruh library, tanpa membuka aplikasi:
 
@@ -94,7 +114,9 @@ rtk proxy python3 scripts/package.py
 
 Jika hanya ada satu identity Apple Development/Developer ID Application, script
 memilihnya otomatis. Jika ada beberapa, set `VUEVPN_SIGNING_IDENTITY` ke SHA-1
-identity yang diinginkan. Gunakan identity/Team yang sama dengan build sebelumnya.
+identity yang diinginkan. Packaging membutuhkan identity beserta private key di
+Keychain; tanpa identity, compile unsigned dan unit test tetap dapat dijalankan.
+Gunakan identity/Team yang sama dengan build sebelumnya.
 Signing lokal tidak melakukan notarization atau publikasi. Script memverifikasi
 signature app/helper dan dependency sebelum mengganti hasil build sebelumnya.
 
@@ -102,7 +124,7 @@ Hasil siap diuji manual: **`artifacts/VueVPN.app`**. Quit aplikasi lama, salin
 hasil ini ke `/Applications`, kemudian buka sendiri. Build tidak mendaftarkan
 atau menjalankan helper.
 
-Untuk development dengan simbol debug dan helper lengkap:
+Untuk development dengan aplikasi Swift dalam konfigurasi Debug dan helper lengkap:
 
 ```sh
 rtk proxy python3 scripts/package.py --configuration Debug
@@ -110,7 +132,9 @@ rtk proxy python3 scripts/package.py --configuration Debug
 
 Alur menjalankannya sama: salin hasil package ke `/Applications` dan buka
 secara manual. Tidak ada server frontend atau hot reload. Project dapat diedit
-di `macos/VueVPN.xcodeproj`. Compile cepat tanpa packaging/signing:
+di `macos/VueVPN.xcodeproj`. Opsi `--configuration Debug` berlaku untuk aplikasi
+Swift; `scripts/native.py` tetap membangun helper/OpenVPN dalam konfigurasi Release.
+Compile cepat tanpa packaging/signing:
 
 ```sh
 rtk proxy python3 scripts/build.py
@@ -118,7 +142,28 @@ rtk proxy python3 scripts/build.py
 
 Hasil compile di `macos/build/Build/Products/Debug/VueVPN.app` belum berisi
 helper lengkap; gunakan hasil package untuk mencoba koneksi. Setelah menambah
-atau menghapus file Swift, jalankan `python3 scripts/sync_sources.py`.
+atau menghapus file Swift, jalankan:
+
+```sh
+rtk proxy python3 scripts/sync_sources.py
+```
+
+Commit perubahan `macos/VueVPN.xcodeproj/project.pbxproj` bersama file Swift-nya.
+Build log tersedia di `artifacts/build/`.
+
+## Peta kode
+
+| Lokasi | Tanggung jawab |
+| --- | --- |
+| `macos/Sources/App/` | Lifecycle aplikasi, window, dan penghubung aksi pengguna |
+| `macos/Sources/UI/` | View AppKit, drawing, tema, input, animasi, dan menu bar |
+| `macos/Sources/Core/` | State, profil, policy routing, credential sesi, dan updater helper |
+| `macos/Sources/Bridge/` + `native/src/AppBridge.mm` | Swift/Objective-C++ bridge, XPC, Keychain, dan registrasi helper |
+| `native/src/Engine.mm` | Sesi OpenVPN, connect/reconnect/disconnect, dan statistik |
+| `native/src/Network.mm` + `native/src/Connectivity.mm` | TUN, route/DNS, journal kepemilikan, dan perubahan jaringan |
+| `native/src/Helper.mm` | Service privileged, otorisasi XPC, serta notifikasi sleep/wake |
+| `macos/CoreTests/`, `macos/VisualTests/`, `native/tests/` | Unit test dengan data sintetis dan referensi gambar beku |
+| `scripts/` | Prepare, sinkronisasi Xcode, build, package, dan test runner |
 
 ## Pengujian tanpa membuka aplikasi
 
@@ -134,6 +179,14 @@ native menguji policy, parser OpenVPN, lifecycle, dan kepemilikan network dengan
 dependency palsu. Test tidak menjalankan helper root, mengubah route/DNS/Keychain,
 atau membuat koneksi VPN.
 
+Jalankan script build/test Xcode secara bergantian karena memakai
+`macos/build` yang sama. Untuk perubahan terarah, runner UI menerima fase seperti
+`behavior`, `theme`, `energy`, dan `performance`; lihat
+`rtk proxy python3 scripts/test_ui.py --help`. Log, `.xcresult`, dan perbandingan
+gambar disimpan di `artifacts/migration/`; hasil CTest ada di
+`native/build/Testing/Temporary/`. Runner memeriksa jumlah test dan menolak test
+yang dilewati. Jumlah yang diharapkan harus diperbarui jika cakupan test berubah.
+
 Perbandingan gambar native menggunakan referensi beku dari UI lama, dengan
 target minimal **95%** pixel sesuai setelah toleransi warna **2/255 per channel**
 untuk dithering. Nilai selisih pixel exact juga dilaporkan. Hasil, cakupan, serta
@@ -141,7 +194,30 @@ batas pemeriksaan ada di `docs/NATIVE_MIGRATION.md`; referensi bukan resource ap
 
 Window nyata, interaksi mouse/keyboard, approval macOS, Keychain, autentikasi,
 trafik VPN, sleep/wake, dan pergantian Wi-Fi perlu diuji pengguna melalui
-`docs/MANUAL_TEST.md`. Hasil unit test tidak membuktikan koneksi live.
+[docs/MANUAL_TEST.md](docs/MANUAL_TEST.md). Hasil unit test tidak membuktikan koneksi live.
+
+## Jika disconnect belum selesai
+
+Jika muncul **Disconnect stalled**, gunakan **Retry disconnect**. Sesi belum
+dianggap selesai dan update helper tetap ditunda sampai cleanup terkonfirmasi.
+Jika error menetap, catat pesan Activity dan ambil sampel helper saat masih macet:
+
+```sh
+rtk proxy sudo sample vuevpn-helper 5 10 -file /tmp/vuevpn-helper-disconnect.txt
+```
+
+Sampel hanya merekam aktivitas thread. Khusus helper versi lama yang sudah
+terlanjur macet, pengguna dapat melakukan restart service satu kali:
+
+```sh
+rtk proxy sudo launchctl kickstart -k system/com.vuevpn.helper
+```
+
+Perintah ini memutus **semua sesi VueVPN**, termasuk profil lain. Ini langkah
+pemulihan manual, bukan bagian rutin build/test atau update. Setelah helper
+kembali merespons, Quit aplikasi lama, ganti dengan build baru, lalu buka sendiri.
+Jika pemulihan gagal, simpan diagnostik untuk pemeriksaan; jangan menghapus route
+secara massal atau menghapus journal kepemilikan.
 
 ## Batas dukungan
 
@@ -151,4 +227,6 @@ TUN IPv4 dengan sertifikat/key inline dan PIN/password. TAP, external PKI, encry
 
 Pilih **App settings → Disable helper and disconnect all**, lalu Quit. Setelah itu hapus `/Applications/VueVPN.app`. Hapus profil melalui UI terlebih dahulu jika ingin sekaligus menghapus credential Keychain; file `.ovpn` sumber tetap ada. Route journal helper berada di `/var/run/com.vuevpn.helper/routes.json` dan hanya berisi kepemilikan route, tanpa credential.
 
-Jika cleanup route gagal, aplikasi menampilkan error dan tidak mengklaim cleanup selesai. Jangan hapus route secara massal. Restart macOS sebelum mencoba koneksi lagi.
+Jika cleanup route gagal, aplikasi menampilkan error dan tidak mengklaim cleanup
+selesai. Tuntaskan cleanup atau pemulihan helper sebelum menghapus aplikasi;
+lihat bagian troubleshooting di atas.
