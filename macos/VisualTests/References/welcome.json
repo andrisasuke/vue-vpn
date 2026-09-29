@@ -1,0 +1,13 @@
+{
+  "clock": 1800000000,
+  "modal": null,
+  "snapshot": {
+    "profiles": [],
+    "helper": {
+      "status": "enabled",
+      "message": "VPN helper enabled."
+    },
+    "logs": [],
+    "sessions": []
+  }
+}

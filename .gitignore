@@ -1,11 +1,10 @@
-node_modules/
-dist/
-src-tauri/target/
-src-tauri/gen/
 native/build/
 vendor/
 artifacts/
 /design/
+macos/build/
+*.xcuserstate
+xcuserdata/
 __pycache__/
 .DS_Store
 .env
@@ -16,4 +15,3 @@ __pycache__/
 *.key
 *.p12
 *.mobileprovision
-!src/tests/fixtures/**

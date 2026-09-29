@@ -1,6 +1,6 @@
 # VueVPN
 
-Client OpenVPN pribadi untuk macOS Apple Silicon: **Vue 3 + TypeScript → Tauri/Rust → embedded OpenVPN 3 Core**. Tidak membutuhkan instalasi OpenVPN CLI.
+Client OpenVPN pribadi untuk macOS Apple Silicon: **Swift/AppKit → Objective-C++ → embedded OpenVPN 3 Core**. Tidak membutuhkan instalasi OpenVPN CLI.
 
 Implementasi memakai window 960 × 720, profil `.ovpn`, PIN/password dengan opsi Keychain, menu bar native, beberapa koneksi bersamaan, routing IPv4 per profil, dan DNS dari server VPN.
 
@@ -16,6 +16,25 @@ Build lokal ini menargetkan **macOS 26.0+ arm64**, sesuai dependency native yang
 
 Menutup window menyembunyikannya. Aplikasi dan VPN tetap berjalan melalui menu bar. **Quit VueVPN** membersihkan koneksi terlebih dahulu. Tidak ada autoconnect saat aplikasi dibuka.
 
+## Tema dan interaksi
+
+Pilih **App settings → Appearance → Light / Dark / System**. Default **System**
+mengikuti appearance macOS secara langsung; Light/Dark mempertahankan pilihan
+meskipun tema macOS berubah. Pilihan tersimpan di preferences aplikasi, berlaku
+untuk seluruh profil, dan tidak memerlukan restart atau reconnect VPN.
+
+Dark memakai palet hijau gelap. Input, dialog, diagram, statistik, dan toast
+mengikuti tema; menu bar/menu native mengikuti macOS. Kontrol yang dapat diklik
+menampilkan cursor tangan, kontrol disabled memakai panah, dan input memakai
+I-beam. Menu serta tombol window bawaan tetap memakai perilaku macOS.
+
+Animasi koneksi memakai layer Core Animation, tanpa timer yang menggambar ulang
+Overview setiap frame. Angka traffic/durasi diperbarui terpisah sekitar sekali
+per detik. Rendering workspace dijeda ketika window tersembunyi, diminimalkan,
+sepenuhnya tertutup, atau tertutup dialog; menu bar dan koneksi tetap aktif.
+Animasi juga dijeda ketika ilustrasinya keluar dari area scroll. Low Power Mode
+mempertahankan animasi normal; pengaturan Reduce Motion tetap dihormati.
+
 ## Memperbarui aplikasi
 
 Quit VueVPN lama, ganti `/Applications/VueVPN.app` dengan build `artifacts/VueVPN.app` terbaru, lalu buka kembali. **Tidak perlu disable-enable helper untuk pembaruan rutin**, termasuk saat berpindah dari versi lama yang belum memiliki deteksi versi.
@@ -26,7 +45,9 @@ Jika ada VPN aktif, status **update pending** ditampilkan; koneksi tetap berjala
 
 Status **not found** dengan bundle lengkap ditangani sebagai registrasi yang perlu dipulihkan: aplikasi memeriksa executable signed dan plist, lalu mencoba registrasi otomatis. Setelah helper lama berhenti, registrasi dilanjutkan memakai instance SMAppService baru. Kegagalan registrasi sementara dicoba maksimal tiga kali dengan jeda; fase ini tetap tampil **updating** sampai fingerprint helper terverifikasi. Helper yang berstatus not registered karena sengaja dinonaktifkan tetap membutuhkan Enable, kecuali registrasinya hilang di tengah pembaruan atau pengguna memilih Retry.
 
-Kegagalan permanen ditampilkan dengan **Retry helper update**, yang melanjutkan registrasi tanpa perlu klik Enable lagi. Tidak ada loop unregister/register tanpa batas. Helper yang tidak dapat dihubungi tidak langsung dihentikan karena aplikasi belum dapat memastikan keadaan koneksinya. Deteksi bundle hanya berlaku pada `.app` lengkap yang signed; executable `tauri dev` tetap memakai helper terpasang dan tidak menggantinya sendiri.
+Disconnect memakai sinyal asinkron ke engine, termasuk saat sleep atau jaringan berubah. Core menghentikan loop event setelah shutdown agar pekerjaan tertunda tidak menahan `connect()` selamanya; transport ditutup sebelum bypass route dilepas. Jika status Disconnecting tidak selesai selama 30 detik, aplikasi menampilkan **Disconnect stalled** dan **Retry disconnect**. Timeout tidak dianggap berhasil: kepemilikan sesi/route tetap dipertahankan, koneksi pengganti ditolak, dan update helper menunggu cleanup. Retry tidak merestart helper atau memutus profil lain.
+
+Kegagalan permanen ditampilkan dengan **Retry helper update**, yang melanjutkan registrasi tanpa perlu klik Enable lagi. Tidak ada loop unregister/register tanpa batas. Helper yang tidak dapat dihubungi tidak langsung dihentikan karena aplikasi belum dapat memastikan keadaan koneksinya. Deteksi bundle hanya berlaku pada `.app` lengkap yang signed; hasil compile unsigned belum merupakan bundle siap pakai dan tidak boleh digunakan untuk pengujian VPN.
 
 ## Profil dan routing
 
@@ -47,43 +68,80 @@ Profil disimpan di `~/Library/Application Support/com.vuevpn.desktop/profiles`, 
 
 Password yang diingat menggunakan macOS Keychain dengan service `com.vuevpn.desktop.credentials`. **Forget password** menghapusnya. Password yang ditolak server dihapus agar koneksi berikutnya meminta input ulang. Tanpa remember, credential hanya dipertahankan dalam memori untuk reconnect sesi tersebut.
 
-Helper berjalan terpisah dengan hak administrator. Komunikasi XPC memerlukan signing identifier dan Team ID yang cocok pada kedua arah, serta user console aktif. UI tidak berjalan sebagai root. Helper tidak menerima command shell atau path file dari webview; profil dibatasi pada konfigurasi inline yang didukung.
+Helper berjalan terpisah dengan hak administrator. Komunikasi XPC memerlukan signing identifier dan Team ID yang cocok pada kedua arah, serta user console aktif. UI tidak berjalan sebagai root. Helper tidak menerima command shell atau path file dari UI; profil dibatasi pada konfigurasi inline yang didukung.
 
 ## Development dan build
 
-Prasyarat: Apple Silicon, Xcode/Command Line Tools, Node.js 22+, Rust toolchain, CMake, Asio, OpenSSL 3, LZ4. Build script mencari dependency Homebrew di `/opt/homebrew`. Siapkan dependency jika belum tersedia:
+Prasyarat: Apple Silicon, macOS 26+, Xcode 26 dengan Swift 6, Python 3,
+CMake, Asio, OpenSSL 3, dan LZ4. Build script mencari dependency Homebrew di
+`/opt/homebrew`. Node.js, npm, Rust, Tauri, WebView, dan OpenVPN CLI tidak diperlukan.
+
+Siapkan dependency jika belum tersedia:
 
 ```sh
 rtk proxy brew install cmake asio openssl@3 lz4
-rtk proxy npm ci
-rtk proxy npm run native:prepare
+rtk proxy python3 scripts/native.py prepare
 ```
 
-OpenVPN Core dipin ke commit dalam `scripts/native.py`; file vendor tidak dicommit. Lockfile npm dan Cargo merekam dependency aplikasi.
+OpenVPN Core dipin ke commit dalam `scripts/native.py`; patch endpoint IPv4
+tetap diterapkan oleh script. File vendor tidak dicommit.
 
-Build aplikasi tanpa membukanya:
+Build Release beserta helper dan seluruh library, tanpa membuka aplikasi:
 
 ```sh
-rtk proxy npm run package
+rtk proxy python3 scripts/package.py
 ```
 
-Jika hanya ada satu identity Apple Development/Developer ID Application, script memilihnya otomatis. Jika ada beberapa identity, set `VUEVPN_SIGNING_IDENTITY` ke SHA-1 identity yang diinginkan. Signing lokal tidak melakukan notarization atau publikasi. Library native disalin ke bundle agar runtime tidak bergantung pada OpenVPN CLI atau lokasi Homebrew.
+Jika hanya ada satu identity Apple Development/Developer ID Application, script
+memilihnya otomatis. Jika ada beberapa, set `VUEVPN_SIGNING_IDENTITY` ke SHA-1
+identity yang diinginkan. Gunakan identity/Team yang sama dengan build sebelumnya.
+Signing lokal tidak melakukan notarization atau publikasi. Script memverifikasi
+signature app/helper dan dependency sebelum mengganti hasil build sebelumnya.
 
-Hasil siap dicoba ada di **`artifacts/VueVPN.app`**. Bundle sementara di `src-tauri/target/release/bundle/macos` belum berisi helper lengkap; gunakan hasil `artifacts`.
+Hasil siap diuji manual: **`artifacts/VueVPN.app`**. Quit aplikasi lama, salin
+hasil ini ke `/Applications`, kemudian buka sendiri. Build tidak mendaftarkan
+atau menjalankan helper.
 
-`npm run dev` hanya frontend. `npm run tauri dev` membuka aplikasi untuk development, tetapi helper memerlukan bundle signed. Jangan jalankan kedua perintah ini jika hanya menginginkan pengujian unit.
-
-## Pengujian
+Untuk development dengan simbol debug dan helper lengkap:
 
 ```sh
-rtk proxy npm test
-rtk proxy cargo test --manifest-path src-tauri/Cargo.toml --lib
-rtk proxy npm run test:native
+rtk proxy python3 scripts/package.py --configuration Debug
 ```
 
-Pengujian selama implementasi hanya unit test. Vue memakai DOM dalam memori dan backend mock; Rust menggunakan mock XPC/Keychain, termasuk migrasi helper lama, penundaan saat VPN aktif, verifikasi fingerprint, approval tertunda, timeout, dan retry pembaruan; native menguji policy dan parsing OpenVPN dengan sertifikat sintetis dalam memori. Tidak ada pengujian yang membuka window, menjalankan helper root, memasang route/DNS, atau membuat koneksi VPN.
+Alur menjalankannya sama: salin hasil package ke `/Applications` dan buka
+secara manual. Tidak ada server frontend atau hot reload. Project dapat diedit
+di `macos/VueVPN.xcodeproj`. Compile cepat tanpa packaging/signing:
 
-UI, approval SMAppService, autentikasi server development, trafik tunnel, resolver macOS, sleep/wake, dan pemulihan jaringan **belum divalidasi secara live**. Panduan uji manual tersedia di `docs/MANUAL_TEST.md`.
+```sh
+rtk proxy python3 scripts/build.py
+```
+
+Hasil compile di `macos/build/Build/Products/Debug/VueVPN.app` belum berisi
+helper lengkap; gunakan hasil package untuk mencoba koneksi. Setelah menambah
+atau menghapus file Swift, jalankan `python3 scripts/sync_sources.py`.
+
+## Pengujian tanpa membuka aplikasi
+
+```sh
+rtk proxy python3 scripts/test_core.py
+rtk proxy python3 scripts/test_ui.py all
+rtk proxy python3 scripts/native.py test
+```
+
+Core memakai fake XPC/Keychain, clock sintetis, dan storage sementara. UI memakai
+AppKit/CoreGraphics offscreen tanpa NSWindow atau event loop aplikasi. Empat suite
+native menguji policy, parser OpenVPN, lifecycle, dan kepemilikan network dengan
+dependency palsu. Test tidak menjalankan helper root, mengubah route/DNS/Keychain,
+atau membuat koneksi VPN.
+
+Perbandingan gambar native menggunakan referensi beku dari UI lama, dengan
+target minimal **95%** pixel sesuai setelah toleransi warna **2/255 per channel**
+untuk dithering. Nilai selisih pixel exact juga dilaporkan. Hasil, cakupan, serta
+batas pemeriksaan ada di `docs/NATIVE_MIGRATION.md`; referensi bukan resource app.
+
+Window nyata, interaksi mouse/keyboard, approval macOS, Keychain, autentikasi,
+trafik VPN, sleep/wake, dan pergantian Wi-Fi perlu diuji pengguna melalui
+`docs/MANUAL_TEST.md`. Hasil unit test tidak membuktikan koneksi live.
 
 ## Batas dukungan
 

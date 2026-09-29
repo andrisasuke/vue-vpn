@@ -7,6 +7,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "artifacts/VueVPN.app"
@@ -72,22 +73,36 @@ def sign(path, identity, identifier=None):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--skip-build", action="store_true", help="Repackage existing compiled outputs")
+    parser.add_argument("--configuration", choices=["Debug", "Release"], default="Release")
     args = parser.parse_args()
     identity = signing_identity()
     if not args.skip_build:
         run(sys.executable, "scripts/native.py", "build")
-        env = os.environ.copy()
-        env.pop("APPLE_SIGNING_IDENTITY", None)
-        run("npm", "run", "tauri", "--", "build", "--bundles", "app", env=env)
-    source = ROOT / "src-tauri/target/release/bundle/macos/VueVPN.app"
+        run(sys.executable, "scripts/build.py", "--configuration", args.configuration)
+    source = ROOT / "macos/build/Build/Products" / args.configuration / "VueVPN.app"
     if not source.exists():
-        raise SystemExit("Build output not found. Run npm run package first.")
-    # Replace only the generated staging artifact, never an installed application.
+        raise SystemExit("Build output not found. Run python3 scripts/package.py without --skip-build.")
+    # Finish and verify in isolation before replacing the previous generated app.
+    # Never touch /Applications or register/start the helper.
     OUTPUT.parent.mkdir(exist_ok=True)
-    if OUTPUT.exists():
-        shutil.rmtree(OUTPUT)
-    shutil.copytree(source, OUTPUT, symlinks=True)
-    contents = OUTPUT / "Contents"
+    with tempfile.TemporaryDirectory(prefix=".vuevpn-package-", dir=OUTPUT.parent) as temporary:
+        staged = Path(temporary) / "VueVPN.app"
+        package(source, staged, identity)
+        previous = Path(temporary) / "previous.app"
+        if OUTPUT.exists():
+            OUTPUT.rename(previous)
+        try:
+            staged.rename(OUTPUT)
+        except BaseException:
+            if previous.exists():
+                previous.rename(OUTPUT)
+            raise
+    print(f"Signed application created: {OUTPUT}")
+    print("App and helper were not launched. Copy VueVPN.app to /Applications for manual testing.")
+
+def package(source, destination, identity):
+    shutil.copytree(source, destination, symlinks=True)
+    contents = destination / "Contents"
     helper = contents / "MacOS/vuevpn-helper"
     shutil.copy2(ROOT / "native/build/vuevpn-helper", helper)
     helper.chmod(0o755)
@@ -106,14 +121,25 @@ def main():
     for library in libs:
         sign(library, identity)
     sign(helper, identity, "com.vuevpn.helper")
-    sign(OUTPUT, identity, "com.vuevpn.desktop")
-    run("codesign", "--verify", "--deep", "--strict", OUTPUT, capture_output=True)
+    sign(destination, identity, "com.vuevpn.desktop")
+    run("codesign", "--verify", "--deep", "--strict", destination, capture_output=True)
+    teams = []
+    for binary, identifier in [(destination, "com.vuevpn.desktop"), (helper, "com.vuevpn.helper")]:
+        details = run("codesign", "-dv", "--verbose=4", binary, capture_output=True, text=True).stderr
+        if f"Identifier={identifier}\n" not in details:
+            raise SystemExit(f"Unexpected signing identifier: {binary.name}")
+        team = re.search(r"^TeamIdentifier=(.+)$", details, re.MULTILINE)
+        if not team or team[1] == "not set":
+            raise SystemExit("App and helper require a signing identity with a Team ID.")
+        teams.append(team[1])
+    if teams[0] != teams[1]:
+        raise SystemExit("App and helper signing teams do not match.")
+    if any("WebKit.framework" in dep for dep in dependencies(contents / "MacOS/VueVPN")):
+        raise SystemExit("Unexpected WebKit dependency in the native application.")
     # Verify the helper has no build-machine-only dependency left.
-    for binary in [helper, *libs]:
+    for binary in [contents / "MacOS/VueVPN", helper, *libs]:
         if any(dep.startswith(("/opt/", "/usr/local/")) for dep in dependencies(binary)):
             raise SystemExit(f"Unbundled dependency in {binary.name}")
-    print(f"Signed application created: {OUTPUT}")
-    print("App and helper were not launched. Copy VueVPN.app to /Applications for manual testing.")
 
 if __name__ == "__main__":
     main()

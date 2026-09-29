@@ -10,7 +10,9 @@ find_path(ASIO_INCLUDE_DIR asio.hpp REQUIRED)
 find_path(LZ4_INCLUDE_DIR lz4.h REQUIRED)
 add_library(vuevpn-core STATIC "${CORE}/client/ovpncli.cpp" "${CORE}/openvpn/crypto/data_epoch.cpp")
 target_include_directories(vuevpn-core PUBLIC "${CORE}" "${ASIO_INCLUDE_DIR}" "${LZ4_INCLUDE_DIR}")
-target_compile_definitions(vuevpn-core PUBLIC USE_TUN_BUILDER ASIO_STANDALONE USE_ASIO HAVE_LZ4 USE_OPENSSL)
+# Each attempt owns its reactor. Once Core finishes graceful shutdown, return
+# from connect() even if an unrelated async operation still holds work alive.
+target_compile_definitions(vuevpn-core PUBLIC USE_TUN_BUILDER ASIO_STANDALONE USE_ASIO HAVE_LZ4 USE_OPENSSL OPENVPN_IO_REQUIRES_STOP)
 target_link_libraries(vuevpn-core PUBLIC OpenSSL::SSL OpenSSL::Crypto "${LZ4_LIBRARY}" "-framework SystemConfiguration" "-framework IOKit" "-framework CoreFoundation")
 add_executable(vuevpn-helper src/Helper.mm src/Engine.mm src/Network.mm src/Connectivity.mm)
 target_include_directories(vuevpn-helper PRIVATE include)

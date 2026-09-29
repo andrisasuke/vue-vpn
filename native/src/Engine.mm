@@ -4,6 +4,7 @@
 #include "CoreConfig.hpp"
 #include "CoreError.hpp"
 #include "Connectivity.hpp"
+#include <openvpn/common/stop.hpp>
 #include <atomic>
 #include <openssl/crypto.h>
 #include <chrono>
@@ -31,12 +32,19 @@ struct Session;
 #ifdef VV_ENGINE_TESTING
 static openvpn::ClientAPI::Status testConnection(Session &,uint64_t);
 #endif
-class Client final:public openvpn::ClientAPI::OpenVPNClient {
+struct CancellationOwner {
+    std::shared_ptr<openvpn::Stop> cancellation;
+    explicit CancellationOwner(std::shared_ptr<openvpn::Stop> signal):cancellation(std::move(signal)){}
+};
+// Base destruction is reverse declaration order: retain the token until Core
+// has destroyed all its stop scopes. Control threads own only this token.
+class Client final:private CancellationOwner,public openvpn::ClientAPI::OpenVPNClient {
     Session &session;Network &network;uint64_t generation;Policy desired,effective;Tunnel tunnel;Dns pushed;bool established=false;
     uint64_t lastBytesIn=0,lastBytesOut=0;
     bool failed(const Error &e);
+    openvpn::Stop *get_async_stop()override{return cancellation.get();}
 public:
-    Client(Session &s,Network &n,Policy p,uint64_t epoch=0):session(s),network(n),generation(epoch),desired(p),effective(p){}
+    Client(Session &s,Network &n,Policy p,uint64_t epoch=0,std::shared_ptr<openvpn::Stop> signal={}):CancellationOwner(std::move(signal)),session(s),network(n),generation(epoch),desired(p),effective(p){}
     bool socket_protect(openvpn_io::detail::socket_type fd,std::string remote,bool ipv6)override;
     void event(const openvpn::ClientAPI::Event &e)override;
     void acc_event(const openvpn::ClientAPI::AppCustomControlMessageEvent &)override{}
@@ -66,21 +74,27 @@ public:
 };
 struct Session {
     Network &network;std::atomic<bool> online{false},canceled{false};std::atomic<uint64_t> generation{0};std::mutex mutex;std::condition_variable wake;
+    std::shared_ptr<openvpn::Stop> cancellation;
     std::shared_ptr<Client> client;std::thread worker;std::string profileId,id,cleanupId,content,username,password,status="connecting",error,code;
     Policy desired,effective;Tunnel tunnel;uint64_t connectedAt=0,bytesIn=0,bytesOut=0;unsigned attempts=0;bool legacy=false,terminal=false,finished=false;
     Session(Network &n,bool available):network(n),online(available){}
     ~Session(){if(worker.joinable())worker.join();wipe(password);wipe(content);}
     // Predicate changes share the condition-variable mutex: wake/cancel cannot be lost.
     void interrupt(bool cancel){
-        {std::lock_guard<std::mutex> lock(mutex);if(cancel){canceled=true;if(!finished)status="disconnecting";}}
-        // The core's clock_tick observes cancellation on its own thread. Calling
-        // stop from the control queue can contend with an in-progress callback.
+        std::shared_ptr<openvpn::Stop> signal;
+        {std::lock_guard<std::mutex> lock(mutex);if(cancel){canceled=true;if(!finished)status="disconnecting";signal=cancellation;}}
         wake.notify_all();
+        // AsioStopScope posts onto the connection reactor and wakes kevent.
+        // Never hold the session mutex while signaling or invoke Client::stop
+        // across threads while Core is constructing/destroying its state.
+        if(signal)signal->stop();
     }
     void environment(bool available){
+        std::shared_ptr<openvpn::Stop> signal;
         {std::lock_guard<std::mutex> lock(mutex);if(online==available)return;online=available;++generation;
-            if(!finished&&!canceled){status="reconnecting";attempts=0;}}
+            if(!finished&&!canceled){status="reconnecting";attempts=0;}signal=cancellation;}
         wake.notify_all();
+        if(signal)signal->stop();
     }
     void setError(const std::string &c,const std::string &message,bool fatal=true){std::lock_guard<std::mutex> lock(mutex);code=c;error=message;terminal=fatal;}
     NSDictionary *snapshot(){std::lock_guard<std::mutex> lock(mutex);return @{@"profileId":ns(profileId),@"sessionId":ns(id),@"status":ns(status),@"address":ns(tunnel.address),@"interface":ns(tunnel.interface),@"connectedAt":connectedAt?(NSObject *)@(connectedAt):(NSObject *)NSNull.null,@"attempts":@(attempts),@"bytesIn":@(bytesIn),@"bytesOut":@(bytesOut),@"error":error.empty()?(NSObject *)NSNull.null:(NSObject *)ns(error),@"errorCode":code.empty()?(NSObject *)NSNull.null:(NSObject *)ns(code),@"effectiveRoutes":routesJson(effective.full?std::vector<Route>{Route("0.0.0.0",0)}:specificRoutes(effective)),@"effectiveDns":dnsJson(effective.dns)};}
@@ -110,8 +124,10 @@ struct Session {
             network.reserve(id,desired);reserved=true;
             while(!canceled){
                 {std::unique_lock<std::mutex> lock(mutex);if(canceled)break;if(!online)status="reconnecting";wake.wait(lock,[&]{return canceled||online.load();});if(canceled)break;terminal=false;error.clear();code.clear();status=attempts?"reconnecting":"connecting";}
-                auto epoch=generation.load();
-                auto c=std::make_shared<Client>(*this,network,desired,epoch);
+                uint64_t epoch;
+                auto signal=std::make_shared<openvpn::Stop>();
+                {std::lock_guard<std::mutex> lock(mutex);if(canceled)break;if(!online)continue;epoch=generation.load();cancellation=signal;}
+                auto c=std::make_shared<Client>(*this,network,desired,epoch,signal);
                 {std::lock_guard<std::mutex> lock(mutex);client=c;}
 #ifdef VV_ENGINE_TESTING
                 auto result=testConnection(*this,epoch);
@@ -129,6 +145,7 @@ struct Session {
                 c->sampleTraffic();
                 {std::lock_guard<std::mutex> lock(mutex);client.reset();}
                 c.reset(); // close the transport before releasing its bypass routes
+                {std::lock_guard<std::mutex> lock(mutex);cancellation.reset();}
                 cleanupNetwork(id);reserved=false;
                 if(canceled)break;
                 network.reserve(id,desired);reserved=true;
@@ -154,6 +171,7 @@ struct Session {
         }catch(const Error &e){setError(e.code,e.what());}catch(const std::exception &){setError("engine_error","The VPN engine stopped unexpectedly.");}
         std::shared_ptr<Client> last;{std::lock_guard<std::mutex> lock(mutex);last=std::move(client);}
         last.reset();
+        {std::lock_guard<std::mutex> lock(mutex);cancellation.reset();}
         if(reserved)try{cleanupNetwork(id);if(code=="cleanup_failed"){std::lock_guard<std::mutex> lock(mutex);error.clear();code.clear();}}
             catch(const Error &e){setError(e.code,e.what());}
         {std::lock_guard<std::mutex> lock(mutex);status=(!error.empty()&&(!canceled||code=="cleanup_failed"))?"error":"disconnected";tunnel={};connectedAt=0;finished=true;wipe(password);wipe(content);}
