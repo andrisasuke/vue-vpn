@@ -13,9 +13,14 @@ Native dependencies used by this personal build:
 - standalone Asio — Boost Software License 1.0.
 - LZ4 — BSD 2-Clause license (library).
 
-Application dependencies include Vue (MIT), Tauri (MIT or Apache-2.0),
-and their transitive dependencies. Exact versions are recorded in
-`package-lock.json` and `src-tauri/Cargo.lock`.
+The application UI uses Apple's AppKit, CoreGraphics, CoreText and CoreImage
+frameworks, with Swift and an Objective-C++ bridge. Vue, Tauri and their
+JavaScript/Rust dependencies have been removed.
 
-This build is intended for private use. Review the complete dependency
-license obligations before any redistribution.
+Native SVG arc and shadow rendering math is adapted from WebKit. Copyright
+notices and the applicable LGPL-2 and BSD terms are included in
+`macos/Resources/ThirdPartyLicenses/WebKit.txt` and `COPYING.LIB`, copied into
+the application resources. This does not link or embed a WebKit UI/runtime.
+
+Frozen test PNGs were produced from this project's previous UI; they are test
+inputs only and are not bundled with the application.

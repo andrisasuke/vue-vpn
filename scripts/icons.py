@@ -7,7 +7,7 @@ import subprocess
 import zlib
 
 ROOT = Path(__file__).resolve().parents[1]
-ICONS = ROOT / "src-tauri/icons"
+ICONS = ROOT / "artifacts/icons"
 
 def distance(x, y, ax, ay, bx, by):
     t = max(0, min(1, ((x-ax)*(bx-ax)+(y-ay)*(by-ay))/((bx-ax)**2+(by-ay)**2)))
@@ -31,12 +31,12 @@ def png(size):
     return b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',size,size,8,6,0,0,0))+chunk(b'IDAT',zlib.compress(rows,9))+chunk(b'IEND',b'')
 
 def main():
-    ICONS.mkdir(exist_ok=True)
+    ICONS.mkdir(parents=True,exist_ok=True)
     iconset=ICONS/'icon.iconset';iconset.mkdir(exist_ok=True)
     for size in [16,32,128,256,512]:
         (iconset/f'icon_{size}x{size}.png').write_bytes(png(size))
         (iconset/f'icon_{size}x{size}@2x.png').write_bytes(png(size*2))
     (ICONS/'icon.png').write_bytes(png(512))
-    subprocess.run(['iconutil','-c','icns',str(iconset),'-o',str(ICONS/'icon.icns')],check=True)
+    subprocess.run(['iconutil','-c','icns',str(iconset),'-o',str(ROOT/'macos/Resources/VueVPN.icns')],check=True)
 
 if __name__=='__main__':main()

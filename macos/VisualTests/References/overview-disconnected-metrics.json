@@ -1,0 +1,521 @@
+{
+  ".connect-actions button" : {
+    "lines" : [
+      {
+        "height" : 15,
+        "width" : 15,
+        "x" : 260,
+        "y" : 355.5
+      },
+      {
+        "height" : 13,
+        "width" : 85.9656982421875,
+        "x" : 283.00152587890625,
+        "y" : 356
+      }
+    ],
+    "rect" : {
+      "height" : 40,
+      "width" : 144.96875,
+      "x" : 242,
+      "y" : 343
+    },
+    "style" : {
+      "backgroundColor" : "rgb(37, 103, 77)",
+      "borderRadius" : "9px",
+      "borderWidth" : "1px",
+      "boxShadow" : "rgba(36, 91, 59, 0.063) 0px 3px 5px 0px",
+      "color" : "rgb(255, 255, 255)",
+      "fontFamily" : "-apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+      "fontSize" : "11px",
+      "fontStyle" : "normal",
+      "fontWeight" : "550",
+      "height" : "40px",
+      "letterSpacing" : "normal",
+      "lineHeight" : "16.5px",
+      "margin" : "0px",
+      "opacity" : "1",
+      "padding" : "11px 17px",
+      "width" : "144.96875px"
+    },
+    "text" : "Connect to VPN"
+  },
+  ".connection" : {
+    "lines" : [
+      {
+        "height" : 236,
+        "width" : 716,
+        "x" : 219,
+        "y" : 168
+      },
+      {
+        "height" : 11,
+        "width" : 115.56744384765625,
+        "x" : 255,
+        "y" : 198
+      },
+      {
+        "height" : 32,
+        "width" : 186.1231689453125,
+        "x" : 242,
+        "y" : 222
+      },
+      {
+        "height" : 32,
+        "width" : 247.75640869140625,
+        "x" : 242,
+        "y" : 252
+      },
+      {
+        "height" : 12,
+        "width" : 303.2666015625,
+        "x" : 242,
+        "y" : 295
+      },
+      {
+        "height" : 12,
+        "width" : 19.8876953125,
+        "x" : 242,
+        "y" : 312
+      },
+      {
+        "height" : 13,
+        "width" : 85.9656982421875,
+        "x" : 283.00152587890625,
+        "y" : 356
+      },
+      {
+        "height" : 28,
+        "width" : 14.56573486328125,
+        "x" : 802.421875,
+        "y" : 348
+      },
+      {
+        "height" : 24,
+        "width" : 5.6279296875,
+        "x" : 827.18603515625,
+        "y" : 351
+      },
+      {
+        "height" : 28,
+        "width" : 14.56573486328125,
+        "x" : 843,
+        "y" : 348
+      },
+      {
+        "height" : 10,
+        "width" : 11.88885498046875,
+        "x" : 805.109375,
+        "y" : 380
+      },
+      {
+        "height" : 10,
+        "width" : 2.7200927734375,
+        "x" : 828.63995361328125,
+        "y" : 380
+      },
+      {
+        "height" : 10,
+        "width" : 22.72125244140625,
+        "x" : 843,
+        "y" : 380
+      },
+      {
+        "height" : 58,
+        "width" : 716,
+        "x" : 219,
+        "y" : 404
+      },
+      {
+        "height" : 11,
+        "width" : 56.62353515625,
+        "x" : 258,
+        "y" : 418
+      },
+      {
+        "height" : 13,
+        "width" : 81.59765625,
+        "x" : 242,
+        "y" : 435
+      },
+      {
+        "height" : 11,
+        "width" : 73.44140625,
+        "x" : 498.328125,
+        "y" : 418
+      },
+      {
+        "height" : 13,
+        "width" : 6.7998046875,
+        "x" : 482.328125,
+        "y" : 435
+      },
+      {
+        "height" : 11,
+        "width" : 89.5517578125,
+        "x" : 721.65625,
+        "y" : 418
+      },
+      {
+        "height" : 13,
+        "width" : 51.640380859375,
+        "x" : 705.65625,
+        "y" : 435
+      },
+      {
+        "height" : 13,
+        "width" : 23.73486328125,
+        "x" : 773.296875,
+        "y" : 435
+      }
+    ],
+    "rect" : {
+      "height" : 296,
+      "width" : 718,
+      "x" : 218,
+      "y" : 167
+    },
+    "style" : {
+      "backgroundColor" : "rgb(240, 244, 233)",
+      "borderRadius" : "18px",
+      "borderWidth" : "1px",
+      "boxShadow" : "none",
+      "color" : "rgb(29, 51, 45)",
+      "fontFamily" : "-apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+      "fontSize" : "14px",
+      "fontStyle" : "normal",
+      "fontWeight" : "400",
+      "height" : "296px",
+      "letterSpacing" : "normal",
+      "lineHeight" : "21px",
+      "margin" : "0px",
+      "opacity" : "1",
+      "padding" : "0px",
+      "width" : "718px"
+    },
+    "text" : "READY TO CONNECT\nYour workspace.\nOne connection away.\nA familiar network, wherever you are. Connect with your profile PIN.\nConnect to VPN\n0\n\/\n0\nIN\n\/\nOUT\nVPN address\nNot assigned\nSession duration\n—\nConnection protocol\nOpenVPN\nUDP\n"
+  },
+  ".connection h2" : {
+    "lines" : [
+      {
+        "height" : 32,
+        "width" : 186.1231689453125,
+        "x" : 242,
+        "y" : 222
+      },
+      {
+        "height" : 32,
+        "width" : 0,
+        "x" : 428.1231689453125,
+        "y" : 222
+      },
+      {
+        "height" : 32,
+        "width" : 247.75640869140625,
+        "x" : 242,
+        "y" : 252
+      }
+    ],
+    "rect" : {
+      "height" : 60,
+      "width" : 360,
+      "x" : 242,
+      "y" : 223
+    },
+    "style" : {
+      "backgroundColor" : "rgba(0, 0, 0, 0)",
+      "borderRadius" : "0px",
+      "borderWidth" : "0px",
+      "boxShadow" : "none",
+      "color" : "rgb(29, 51, 45)",
+      "fontFamily" : "-apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+      "fontSize" : "27px",
+      "fontStyle" : "normal",
+      "fontWeight" : "580",
+      "height" : "60px",
+      "letterSpacing" : "-1px",
+      "lineHeight" : "30.24px",
+      "margin" : "12px 0px 0px",
+      "opacity" : "1",
+      "padding" : "0px",
+      "width" : "360px"
+    },
+    "text" : "Your workspace.\nOne connection away."
+  },
+  ".connection-copy>p" : {
+    "lines" : [
+      {
+        "height" : 12,
+        "width" : 303.2666015625,
+        "x" : 242,
+        "y" : 295
+      },
+      {
+        "height" : 12,
+        "width" : 19.8876953125,
+        "x" : 242,
+        "y" : 312
+      }
+    ],
+    "rect" : {
+      "height" : 34,
+      "width" : 320,
+      "x" : 242,
+      "y" : 293
+    },
+    "style" : {
+      "backgroundColor" : "rgba(0, 0, 0, 0)",
+      "borderRadius" : "0px",
+      "borderWidth" : "0px",
+      "boxShadow" : "none",
+      "color" : "rgb(124, 136, 112)",
+      "fontFamily" : "-apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+      "fontSize" : "10px",
+      "fontStyle" : "normal",
+      "fontWeight" : "400",
+      "height" : "34px",
+      "letterSpacing" : "normal",
+      "lineHeight" : "17px",
+      "margin" : "10px 0px 0px",
+      "opacity" : "1",
+      "padding" : "0px",
+      "width" : "320px"
+    },
+    "text" : "A familiar network, wherever you are. Connect with your profile PIN."
+  },
+  ".dialog-subtitle" : null,
+  ".dialog-surface" : null,
+  ".dialog-title h2" : null,
+  ".network-art" : {
+    "lines" : [
+      {
+        "height" : 180,
+        "width" : 194,
+        "x" : 733,
+        "y" : 168
+      },
+      {
+        "height" : 41,
+        "width" : 198,
+        "x" : 731,
+        "y" : 350
+      },
+      {
+        "height" : 28,
+        "width" : 14.56573486328125,
+        "x" : 802.421875,
+        "y" : 348
+      },
+      {
+        "height" : 24,
+        "width" : 5.6279296875,
+        "x" : 827.18603515625,
+        "y" : 351
+      },
+      {
+        "height" : 28,
+        "width" : 14.56573486328125,
+        "x" : 843,
+        "y" : 348
+      },
+      {
+        "height" : 10,
+        "width" : 11.88885498046875,
+        "x" : 805.109375,
+        "y" : 380
+      },
+      {
+        "height" : 10,
+        "width" : 2.7200927734375,
+        "x" : 828.63995361328125,
+        "y" : 380
+      },
+      {
+        "height" : 10,
+        "width" : 22.72125244140625,
+        "x" : 843,
+        "y" : 380
+      }
+    ],
+    "rect" : {
+      "height" : 236,
+      "width" : 210,
+      "x" : 725,
+      "y" : 168
+    },
+    "style" : {
+      "backgroundColor" : "rgba(0, 0, 0, 0)",
+      "borderRadius" : "0px",
+      "borderWidth" : "0px",
+      "boxShadow" : "none",
+      "color" : "rgb(29, 51, 45)",
+      "fontFamily" : "-apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+      "fontSize" : "14px",
+      "fontStyle" : "normal",
+      "fontWeight" : "400",
+      "height" : "236px",
+      "letterSpacing" : "normal",
+      "lineHeight" : "21px",
+      "margin" : "0px",
+      "opacity" : "0.85",
+      "padding" : "0px",
+      "width" : "210px"
+    },
+    "text" : "0\n\/\n0\nIN\n\/\nOUT\n"
+  },
+  ".network-mark" : {
+    "lines" : [
+      {
+        "height" : 38,
+        "width" : 38,
+        "x" : 811,
+        "y" : 239
+      }
+    ],
+    "rect" : {
+      "height" : 73.551437377929688,
+      "width" : 73.5513916015625,
+      "x" : 793.22430419921875,
+      "y" : 221.22428894042969
+    },
+    "style" : {
+      "backgroundColor" : "rgb(37, 103, 77)",
+      "borderRadius" : "21px",
+      "borderWidth" : "0px",
+      "boxShadow" : "rgba(70, 100, 55, 0.125) 0px 12px 23px 0px, rgba(255, 255, 255, 0.376) 0px 0px 0px 10px, rgb(219, 229, 206) 0px 0px 0px 11px",
+      "color" : "rgb(216, 239, 173)",
+      "fontFamily" : "-apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+      "fontSize" : "14px",
+      "fontStyle" : "normal",
+      "fontWeight" : "400",
+      "height" : "66px",
+      "letterSpacing" : "normal",
+      "lineHeight" : "21px",
+      "margin" : "0px",
+      "opacity" : "1",
+      "padding" : "0px",
+      "width" : "66px"
+    },
+    "text" : ""
+  },
+  ".network-traffic" : {
+    "lines" : [
+      {
+        "height" : 24,
+        "width" : 198,
+        "x" : 731,
+        "y" : 350
+      },
+      {
+        "height" : 28,
+        "width" : 14.56573486328125,
+        "x" : 802.421875,
+        "y" : 348
+      },
+      {
+        "height" : 24,
+        "width" : 5.6279296875,
+        "x" : 827.18603515625,
+        "y" : 351
+      },
+      {
+        "height" : 28,
+        "width" : 14.56573486328125,
+        "x" : 843,
+        "y" : 348
+      },
+      {
+        "height" : 12,
+        "width" : 198,
+        "x" : 731,
+        "y" : 379
+      },
+      {
+        "height" : 10,
+        "width" : 11.88885498046875,
+        "x" : 805.109375,
+        "y" : 380
+      },
+      {
+        "height" : 10,
+        "width" : 2.7200927734375,
+        "x" : 828.63995361328125,
+        "y" : 380
+      },
+      {
+        "height" : 10,
+        "width" : 22.72125244140625,
+        "x" : 843,
+        "y" : 380
+      }
+    ],
+    "rect" : {
+      "height" : 41,
+      "width" : 198,
+      "x" : 731,
+      "y" : 350
+    },
+    "style" : {
+      "backgroundColor" : "rgba(0, 0, 0, 0)",
+      "borderRadius" : "0px",
+      "borderWidth" : "0px",
+      "boxShadow" : "none",
+      "color" : "rgb(37, 103, 77)",
+      "fontFamily" : "-apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+      "fontSize" : "14px",
+      "fontStyle" : "normal",
+      "fontWeight" : "400",
+      "height" : "41px",
+      "letterSpacing" : "normal",
+      "lineHeight" : "21px",
+      "margin" : "0px",
+      "opacity" : "1",
+      "padding" : "0px",
+      "width" : "198px"
+    },
+    "text" : "0\n\/\n0\nIN\n\/\nOUT\n"
+  },
+  ".password-wrap" : null,
+  ".remember-option" : null,
+  ".status-badge" : {
+    "lines" : [
+      {
+        "height" : 6,
+        "width" : 6,
+        "x" : 242,
+        "y" : 200.5
+      },
+      {
+        "height" : 11,
+        "width" : 115.56744384765625,
+        "x" : 255,
+        "y" : 198
+      }
+    ],
+    "rect" : {
+      "height" : 13,
+      "width" : 128.578125,
+      "x" : 242,
+      "y" : 197
+    },
+    "style" : {
+      "backgroundColor" : "rgba(0, 0, 0, 0)",
+      "borderRadius" : "0px",
+      "borderWidth" : "0px",
+      "boxShadow" : "none",
+      "color" : "rgb(118, 133, 106)",
+      "fontFamily" : "-apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+      "fontSize" : "9px",
+      "fontStyle" : "normal",
+      "fontWeight" : "650",
+      "height" : "13px",
+      "letterSpacing" : "1.2px",
+      "lineHeight" : "13.5px",
+      "margin" : "0px",
+      "opacity" : "1",
+      "padding" : "0px",
+      "width" : "128.578125px"
+    },
+    "text" : "READY TO CONNECT"
+  }
+}

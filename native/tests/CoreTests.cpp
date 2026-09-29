@@ -1,8 +1,10 @@
-// Only parses synthetic profiles in memory. No connect(), sockets, TUN, or DNS mutations.
+// Synthetic profiles and in-memory shutdown. No connect(), sockets, TUN, or DNS mutations.
 #include "Policy.hpp"
 #include "CoreConfig.hpp"
 #include "CoreError.hpp"
 #include <openvpn/client/remotelist.hpp>
+#include <openvpn/client/cliconnect.hpp>
+#include <openvpn/asio/asiostop.hpp>
 #include <openvpn/ssl/sslchoose.hpp>
 #include <openvpn/ssl/proto.hpp>
 #include <openvpn/frame/frame_init.hpp>
@@ -22,6 +24,36 @@ public:
     void external_pki_sign_request(ExternalPKISignRequest &)override{assert(false);}
 };
 static std::string text(BIO *bio){char *p=nullptr;auto len=BIO_get_mem_data(bio,&p);return {p,static_cast<size_t>(len)};}
+static void gracefulShutdownWithPendingWork(const std::string &profile,Parser &builder){
+    struct Events final:openvpn::ClientEvent::Queue {
+        unsigned disconnected=0;
+        void add_event(openvpn::ClientEvent::Base::Ptr event)override{
+            assert(event->id()==openvpn::ClientEvent::DISCONNECTED);++disconnected;
+        }
+    };
+    auto options=openvpn::OptionList::parse_from_config_static(profile,nullptr);
+    openvpn::ClientOptions::Config config;
+    config.cli_stats.reset(new openvpn::SessionStats);
+    auto events=new Events;config.cli_events.reset(events);
+    config.builder=&builder;
+    config.clientconf.enableNonPreferredDCAlgorithms=true;
+    config.proto_context_options.reset(new openvpn::ProtoContextCompressionOptions);
+    config.proto_context_options->parse_compression_mode("asym");
+    openvpn::ClientOptions::Ptr parsed(new openvpn::ClientOptions(options,config));
+    // Never start the controller: this exercises Core's actual graceful_stop
+    // and reactor exit with outstanding work, without any network connection.
+    openvpn_io::io_context reactor;
+    auto work=openvpn_io::make_work_guard(reactor);
+    openvpn::ClientConnect::Ptr controller(new openvpn::ClientConnect(reactor,parsed));
+    openvpn::Stop cancel;
+    openvpn::AsioStopScope stop(reactor,&cancel,[&]{controller->graceful_stop();});
+    cancel.stop();
+    reactor.run_for(std::chrono::milliseconds(100));
+    assert(events->disconnected==1);
+    // Fails without OPENVPN_IO_REQUIRES_STOP: outstanding work keeps run alive
+    // after DISCONNECTED has already canceled Core's clock_tick timer.
+    assert(reactor.stopped());
+}
 static void numericRemoteEndpoint(){
     // Reproduce a successful resolver callback containing no compatible IPv4
     // endpoint. Use synthetic results only: no DNS, sockets, or VPN connection.
@@ -156,6 +188,7 @@ int main(){
     auto bio=std::unique_ptr<BIO,decltype(&BIO_free)>(BIO_new(BIO_s_mem()),BIO_free);assert(PEM_write_bio_X509(bio.get(),cert.get()));auto pem=text(bio.get());BIO_reset(bio.get());assert(PEM_write_bio_PrivateKey(bio.get(),key.get(),nullptr,nullptr,0,nullptr,nullptr));auto privateKey=text(bio.get());
     const std::string base="client\ndev tun\nremote vpn.example.test 14180 udp\nauth-user-pass\nauth SHA1\ncipher AES-128-CBC\ndata-ciphers AES-128-GCM:AES-128-CBC\ncomp-lzo no\nroute-nopull\nroute 10.7.0.0 255.255.0.0\n<ca>\n"+pem+"</ca>\n<cert>\n"+pem+"</cert>\n<key>\n"+privateKey+"</key>\n";
     Parser parser;auto config=vv::coreConfig(vv::safeConfig(base),true);
+    gracefulShutdownWithPendingWork(vv::safeConfig(base),parser);
     assert(config.compressionMode=="asym");
     assert(vv::coreConfig("client\n",false).compressionMode=="no");
     assert(vv::coreConfig("comp-lzo no\nallow-compression no\n",false).compressionMode=="no");

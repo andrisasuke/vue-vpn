@@ -1,0 +1,38 @@
+{
+  "clock": 1800000000,
+  "modal": null,
+  "snapshot": {
+    "profiles": [
+      {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "name": "Development",
+        "authKind": "pin",
+        "username": "test",
+        "routingMode": "selected",
+        "routes": [
+          {
+            "address": "10.7.0.0",
+            "prefix": 16
+          }
+        ],
+        "dns": {
+          "servers": [],
+          "domains": []
+        },
+        "protocol": "udp",
+        "server": "192.0.2.10",
+        "allowPasswordSave": true,
+        "allowLegacyCipher": true,
+        "warnings": [],
+        "remembered": false
+      }
+    ],
+    "helper": {
+      "status": "enabled",
+      "message": "VPN helper enabled."
+    },
+    "logs": [],
+    "sessions": []
+  },
+  "screen": "setup"
+}

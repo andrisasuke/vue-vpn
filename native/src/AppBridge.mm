@@ -39,7 +39,7 @@ static void invalidateConnection(NSXPCConnection *expected=nil){
 }
 extern "C" char *vv_helper_identity(){@autoreleasepool{
     NSBundle *bundle=NSBundle.mainBundle;
-    // A cargo/tauri dev executable has no bundled helper to install.
+    // A standalone executable has no bundled helper to install.
     if(![bundle.bundlePath.pathExtension isEqualToString:@"app"])return copied(@{@"buildId":NSNull.null});
     NSURL *plistURL=[bundle.bundleURL URLByAppendingPathComponent:@"Contents/Library/LaunchDaemons/com.vuevpn.helper.plist"];
     NSDictionary *plist=[NSDictionary dictionaryWithContentsOfURL:plistURL error:nil];

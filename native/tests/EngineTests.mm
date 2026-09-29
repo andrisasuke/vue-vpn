@@ -2,6 +2,7 @@
 // driver. No helper process, OpenVPN connect, OS routes, sockets, or UI is used.
 #define VV_ENGINE_TESTING 1
 #include "../src/Engine.mm"
+#include <openvpn/asio/asiostop.hpp>
 #include <cassert>
 #include <future>
 #include <iostream>
@@ -53,9 +54,17 @@ static openvpn::ClientAPI::Status testConnection(Session &s,uint64_t epoch){
         assert(!c.socket_protect(-1,"192.0.2.1",false));
         openvpn::ClientAPI::Status result;result.error=true;result.status="TUN_SETUP_FAILED";return result;
     }
-    std::unique_lock<std::mutex> lock(s.mutex);
-    if(!s.canceled&&epoch==s.generation&&s.online)s.status="connected";
-    assert(s.wake.wait_for(lock,5s,[&]{return s.canceled||!s.online||epoch!=s.generation;}));
+    // Exercise the real asynchronous stop primitive without a VPN or timers.
+    // The previous flag + clock_tick implementation cannot wake this reactor.
+    openvpn_io::io_context reactor;
+    auto work=openvpn_io::make_work_guard(reactor);
+    std::shared_ptr<openvpn::Stop> signal;
+    {std::lock_guard<std::mutex> lock(s.mutex);signal=s.cancellation;
+        if(!s.canceled&&epoch==s.generation&&s.online)s.status="connected";}
+    assert(signal);
+    openvpn::AsioStopScope stop(reactor,signal.get(),[&]{reactor.stop();});
+    reactor.run_for(4s);
+    assert(reactor.stopped());
     return {};
 }
 }
@@ -101,6 +110,31 @@ static void twoSessions(){
     engine.environment(true);started(two,3);
     assert([session(engine,one)[@"status"] isEqual:@"disconnected"]);
     engine.request(@{@"op":@"disconnect_all"});finished(engine,two);
+}
+static void cancelWithoutClockTick(){
+    reset();vv::Engine engine;engine.environment(true);
+    connect(engine,one,@"10.10.0.0");connect(engine,two,@"10.20.0.0");
+    finished(engine,one,@"connected");finished(engine,two,@"connected");
+    engine.request(@{@"op":@"disconnect",@"profileId":one});finished(engine,one);
+    // Stopping one reactor must not stop another profile or its routes.
+    assert([session(engine,two)[@"status"] isEqual:@"connected"]);
+    engine.request(@{@"op":@"disconnect",@"profileId":one});finished(engine,one);
+    engine.request(@{@"op":@"disconnect",@"profileId":two});finished(engine,two);
+}
+static void cancellationBeforeCoreRegisters(){
+    reset();vv::Network network;vv::Session session(network,true);
+    auto signal=std::make_shared<openvpn::Stop>();session.cancellation=signal;
+    session.interrupt(true);session.interrupt(true);
+    openvpn_io::io_context reactor;
+    auto work=openvpn_io::make_work_guard(reactor);
+    unsigned calls=0;
+    openvpn::AsioStopScope stop(reactor,signal.get(),[&]{++calls;reactor.stop();});
+    reactor.run_for(100ms);assert(reactor.stopped()&&calls==1);
+    // A later attempt has a fresh token; previous cancellation cannot leak.
+    auto fresh=std::make_shared<openvpn::Stop>();reactor.restart();
+    openvpn::AsioStopScope next(reactor,fresh.get(),[&]{++calls;reactor.stop();});
+    signal->stop();reactor.poll();assert(calls==1);
+    fresh->stop();reactor.run_for(100ms);assert(reactor.stopped()&&calls==2);
 }
 static void responsiveCleanup(){
     reset();vv::Engine engine;engine.environment(true);
@@ -231,4 +265,4 @@ static void returnedCoreErrors(){
     }
 }
 
-int main(){@autoreleasepool{readiness();twoSessions();responsiveCleanup();offlineAndCleanupErrors();cleanupRetryAfterWifiChange();terminalErrorsAndReservationOwnership();trafficCounters();returnedCoreErrors();std::cout<<"Engine lifecycle, traffic counters, and safe connection diagnostics passed\n";}}
+int main(){@autoreleasepool{readiness();twoSessions();cancelWithoutClockTick();cancellationBeforeCoreRegisters();responsiveCleanup();offlineAndCleanupErrors();cleanupRetryAfterWifiChange();terminalErrorsAndReservationOwnership();trafficCounters();returnedCoreErrors();std::cout<<"Engine lifecycle, asynchronous cancellation, traffic counters, and safe connection diagnostics passed\n";}}

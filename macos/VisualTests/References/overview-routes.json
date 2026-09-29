@@ -1,0 +1,64 @@
+{
+  "clock": 1800000000,
+  "modal": null,
+  "snapshot": {
+    "profiles": [
+      {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "name": "Development",
+        "authKind": "pin",
+        "username": "test",
+        "routingMode": "selected",
+        "routes": [
+          {
+            "address": "10.7.0.0",
+            "prefix": 16
+          },
+          {
+            "address": "172.22.0.0",
+            "prefix": 16
+          },
+          {
+            "address": "192.0.2.42",
+            "prefix": 32
+          }
+        ],
+        "dns": {
+          "servers": [],
+          "domains": []
+        },
+        "protocol": "udp",
+        "server": "192.0.2.10",
+        "allowPasswordSave": true,
+        "allowLegacyCipher": true,
+        "warnings": [],
+        "remembered": false
+      }
+    ],
+    "helper": {
+      "status": "enabled",
+      "message": "VPN helper enabled."
+    },
+    "logs": [],
+    "sessions": [
+      {
+        "profileId": "00000000-0000-4000-8000-000000000001",
+        "sessionId": "00000000-0000-4000-8000-000000000002",
+        "status": "connected",
+        "address": "10.8.0.2",
+        "interface": "utun9",
+        "connectedAt": 1799999900,
+        "attempts": 0,
+        "bytesIn": 1500000,
+        "bytesOut": 10000000,
+        "error": null,
+        "errorCode": null,
+        "effectiveRoutes": [],
+        "effectiveDns": {
+          "servers": [],
+          "domains": []
+        }
+      }
+    ]
+  }
+}
