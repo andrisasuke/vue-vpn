@@ -90,7 +90,7 @@ bundle and must not be used for live VPN testing.
 
 ## Profiles and routing
 
-- Pritunl profiles with `password_mode: pin` use a PIN and the username from profile metadata. The username can be changed in **Edit profile**. Standard username/password profiles are also supported.
+- Pritunl profiles with a client certificate/key and `password_mode: pin` use a PIN and the username from profile metadata. Standard `auth-user-pass` profiles without a client certificate/key are also supported, including profiles with inline CA and `tls-auth`. Set or change the username in **Edit profile**. A client certificate and key must be supplied together; explicit client-certificate requirements remain in effect.
 - Profiles containing `route-nopull` and explicit routes start in **Selected networks** mode. Other profiles start in **All IPv4 traffic** mode.
 - The editor accepts prefixes (`24`, `/24`) or subnet masks (`255.255.255.0`). Addresses are normalized to network addresses.
 - Only one full IPv4 tunnel can be active. Other split-tunnel profiles may run concurrently if their subnets and DNS domains do not overlap.
@@ -274,7 +274,7 @@ bulk-delete routes or delete the ownership journal.
 
 ## Support limits
 
-Supported: IPv4 TUN with inline certificates/keys and PIN/password authentication.
+Supported: IPv4 TUN with inline client certificate/key authentication (optionally with PIN/password), or username/password authentication without a client certificate.
 TAP, external PKI, encrypted private keys, OTP/dynamic challenges, SSO, device
 authentication, Pritunl dynamic firewall, scripts/plugins, proxies, and chained
 external configurations are not supported. Specific errors are reported during

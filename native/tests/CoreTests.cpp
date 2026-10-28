@@ -174,6 +174,59 @@ static void connectionDiagnostics(){
     std::string longMessage;for(unsigned i=0;i<300;++i)longMessage+="setup error; ";
     result=vv::coreFailure("",longMessage);assert(result.message.size()<850&&result.message.substr(result.message.size()-3)=="...");
 }
+static void authenticationProfiles(const std::string &pem,const std::string &privateKey,const std::string &encryptedKey){
+    const std::string common="client\ndev tun\nremote vpn.example.test 1194 udp\n<ca>\n"+pem+"</ca>\n";
+    const std::string cert="<cert>\n"+pem+"</cert>\n";
+    const std::string key="<key>\n"+privateKey+"</key>\n";
+    const std::string tls="key-direction 1\n<tls-auth>\n-----BEGIN OpenVPN Static key V1-----\n"+
+        [] { std::string lines; for (int i=0;i<16;++i) lines+=std::string(32,'a')+"\n"; return lines; }()+"-----END OpenVPN Static key V1-----\n</tls-auth>\n";
+    auto evaluate=[](const std::string &profile){
+        Parser parser;
+        return parser.eval_config(vv::coreConfig(vv::safeConfig(profile),false));
+    };
+    auto passwordProfile=common+"auth-user-pass\n"+tls;
+    auto adapted=vv::coreConfig(vv::safeConfig(passwordProfile),false);
+    assert(adapted.content.find("setenv CLIENT_CERT 0")!=std::string::npos);
+    auto password=evaluate(passwordProfile);
+    assert(!password.error&&!password.externalPki&&!password.autologin);
+    // Prepare the same Core connection options without starting a controller or network.
+    Parser builder;
+    auto options=openvpn::OptionList::parse_from_config_static(adapted.content,nullptr);
+    openvpn::ClientOptions::Config connection;
+    connection.cli_stats.reset(new openvpn::SessionStats);
+    connection.builder=&builder;
+    connection.proto_context_options.reset(new openvpn::ProtoContextCompressionOptions);
+    connection.proto_context_options->parse_compression_mode(adapted.compressionMode);
+    openvpn::ClientOptions::Ptr prepared(new openvpn::ClientOptions(options,connection));
+    auto pin=evaluate(common+"auth-user-pass\n"+cert+key);
+    assert(!pin.error&&!pin.externalPki&&!pin.autologin);
+    auto certificate=evaluate(common+cert+key);
+    assert(!certificate.error&&!certificate.externalPki&&certificate.autologin);
+    for(const auto &partial:{cert,key}) for(const auto &setting:{std::string(),std::string("setenv CLIENT_CERT 0\n")}){
+        bool rejected=false;
+        try { (void)vv::coreConfig(vv::safeConfig(common+"auth-user-pass\n"+partial+setting),false); }
+        catch(const vv::Error &error){ rejected=error.code=="unsupported_auth"; }
+        assert(rejected);
+    }
+    const auto explicitlyDisabled=vv::safeConfig(passwordProfile+"setenv CLIENT_CERT 0\n");
+    assert(vv::coreConfig(explicitlyDisabled,false).content==explicitlyDisabled);
+    auto disabled=evaluate(passwordProfile+"setenv CLIENT_CERT 0\n");
+    assert(!disabled.error&&!disabled.externalPki&&!disabled.autologin);
+    auto required=evaluate(passwordProfile+"setenv CLIENT_CERT 1\n");
+    assert(!required.error&&required.externalPki);
+    auto requiredWithCert=evaluate(common+"auth-user-pass\n"+cert+key+"setenv CLIENT_CERT 1\n");
+    assert(!requiredWithCert.error&&!requiredWithCert.externalPki);
+    assert(evaluate(passwordProfile+"setenv CLIENT_CERT invalid\n").error);
+    assert(evaluate(passwordProfile+"setenv CLIENT_CERT 1\nsetenv CLIENT_CERT invalid\n").error);
+    auto encrypted=evaluate(common+"auth-user-pass\n"+cert+"<key>\n"+encryptedKey+"</key>\n");
+    assert(!encrypted.error&&encrypted.privateKeyPasswordRequired);
+    auto external=evaluate(common);
+    assert(!external.error&&external.externalPki);
+    bool challengeRejected=false;
+    try { (void)vv::safeConfig(common+"static-challenge test 0\n"); }
+    catch(const vv::Error &error){ challengeRejected=error.code=="invalid_profile"; }
+    assert(challengeRejected);
+}
 int main(){
     numericRemoteEndpoint();
     remoteEndpointLifecycle<openvpn_io::ip::udp>("udp4");
@@ -186,6 +239,10 @@ int main(){
     X509_set_version(cert.get(),2);ASN1_INTEGER_set(X509_get_serialNumber(cert.get()),1);X509_gmtime_adj(X509_getm_notBefore(cert.get()),0);X509_gmtime_adj(X509_getm_notAfter(cert.get()),86400);
     X509_set_pubkey(cert.get(),key.get());auto name=X509_get_subject_name(cert.get());X509_NAME_add_entry_by_txt(name,"CN",MBSTRING_ASC,(const unsigned char*)"vuevpn-unit-test",-1,-1,0);X509_set_issuer_name(cert.get(),name);assert(X509_sign(cert.get(),key.get(),EVP_sha256())>0);
     auto bio=std::unique_ptr<BIO,decltype(&BIO_free)>(BIO_new(BIO_s_mem()),BIO_free);assert(PEM_write_bio_X509(bio.get(),cert.get()));auto pem=text(bio.get());BIO_reset(bio.get());assert(PEM_write_bio_PrivateKey(bio.get(),key.get(),nullptr,nullptr,0,nullptr,nullptr));auto privateKey=text(bio.get());
+    BIO_reset(bio.get());
+    unsigned char syntheticPassword[]="synthetic-test-password";
+    assert(PEM_write_bio_PrivateKey(bio.get(),key.get(),EVP_aes_256_cbc(),syntheticPassword,sizeof(syntheticPassword)-1,nullptr,nullptr));
+    authenticationProfiles(pem,privateKey,text(bio.get()));
     const std::string base="client\ndev tun\nremote vpn.example.test 14180 udp\nauth-user-pass\nauth SHA1\ncipher AES-128-CBC\ndata-ciphers AES-128-GCM:AES-128-CBC\ncomp-lzo no\nroute-nopull\nroute 10.7.0.0 255.255.0.0\n<ca>\n"+pem+"</ca>\n<cert>\n"+pem+"</cert>\n<key>\n"+privateKey+"</key>\n";
     Parser parser;auto config=vv::coreConfig(vv::safeConfig(base),true);
     gracefulShutdownWithPendingWork(vv::safeConfig(base),parser);
@@ -196,7 +253,7 @@ int main(){
     assert(vv::coreConfig("compress stub\n",false).compressionMode=="asym");
     assert(vv::coreConfig("comp-lzo yes\n",false).compressionMode=="asym");
     assert(vv::coreConfig("compress lz4\nallow-compression yes\n",false).compressionMode=="asym");
-    assert(vv::coreConfig("# comp-lzo no\n<key>\ncomp-lzo no\n</key>\n",false).compressionMode=="no");
+    assert(vv::coreConfig("# comp-lzo no\n<ca>\ncomp-lzo no\n</ca>\n",false).compressionMode=="no");
     assert(vv::coreConfig("comp-lzo \"no\" # legacy framing\n",false).compressionMode=="asym");
     // Exercise Core's actual pushed-option parser and legacy packet framing in memory.
     // eval_config alone cannot catch errors that occur when server settings arrive.

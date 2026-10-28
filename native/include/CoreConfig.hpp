@@ -1,4 +1,5 @@
 #pragma once
+#include "Policy.hpp"
 #include <client/ovpncli.hpp>
 // Match ovpncli.cpp's thread-local logging types across translation units.
 #ifndef OPENVPN_LOG
@@ -22,6 +23,24 @@ inline openvpn::ClientAPI::Config coreConfig(const std::string &content, bool le
     config.retryOnAuthFailed = false;
     config.enableNonPreferredDCAlgorithms = legacy;
     const auto options = openvpn::OptionList::parse_from_config_static(content, nullptr);
+    const bool cert = options.exists("cert");
+    const bool key = options.exists("key");
+    if (cert != key)
+        throw Error("unsupported_auth", "A client certificate and private key must be supplied together.");
+    bool explicitClientCert = false;
+    if (const auto setenv = options.get_index_ptr("setenv")) {
+        for (const auto index : *setenv) {
+            const auto &option = options[index];
+            if (option.size() > 1 && option.ref(1) == "CLIENT_CERT") {
+                explicitClientCert = true;
+                break;
+            }
+        }
+    }
+    // Core derives externalPki during evaluation independently of
+    // Config.disableClientCert. Adapt only an unambiguous password-only profile.
+    if (options.exists("auth-user-pass") && !cert && !key && !explicitClientCert)
+        config.content += "\nsetenv CLIENT_CERT 0\n";
     config.compressionMode = "no";
     const auto compress = options.get_ptr("compress");
     const auto lzo = options.get_ptr("comp-lzo");
