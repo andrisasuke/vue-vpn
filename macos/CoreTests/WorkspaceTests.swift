@@ -5,6 +5,7 @@ import XCTest
 private final class WorkspaceFake: BackendExecuting {
     var commands: [BackendCommand] = []
     var reply = BackendResult()
+    var replies: [BackendResult] = []
     var paused = false
     var continuation: CheckedContinuation<BackendResult, Never>?
     var entered: (() -> Void)?
@@ -16,7 +17,7 @@ private final class WorkspaceFake: BackendExecuting {
                 entered?()
             }
         }
-        return reply
+        return replies.isEmpty ? reply : replies.removeFirst()
     }
     func finish(_ reply: BackendResult) { continuation?.resume(returning: reply); continuation = nil }
 }
@@ -127,11 +128,92 @@ final class WorkspaceTests: XCTestCase {
         XCTAssertFalse(model.connectionButtonDisabled); XCTAssertEqual(model.connectionButtonLabel, "Connect to VPN")
     }
 
-    func testLockedKeychainAsksForCredentialsAgain() async throws {
-        let (model, fake, initial) = try setup(); var state = initial; state.profiles[0].remembered = true
-        model.accept(state); fake.reply = BackendResult(snapshot: state, failure: AppError("keychain", "Locked"))
+    func testSavedSecretFailuresRequireReplacementWithoutRemembering() async throws {
+        for kind in [AuthKind.pin, .usernamePassword] {
+            for code in ["keychain", "credentials_required"] {
+                let (model, fake, initial) = try setup(); var state = initial
+                state.profiles[0].authKind = kind; state.profiles[0].username = "demo-user"; state.profiles[0].remembered = true
+                model.accept(state)
+                fake.replies = [
+                    BackendResult(snapshot: state, failure: AppError(code, "Saved secret unavailable")),
+                    BackendResult(snapshot: state),
+                ]
+
+                await model.toggle()
+                XCTAssertEqual(model.modal, .credentials(state.profiles[0].id), "\(kind) / \(code)")
+                XCTAssertTrue(model.credentialsNeedPassword, "\(kind) / \(code)")
+                XCTAssertFalse(model.credentialsNeedUsername, "\(kind) / \(code)")
+                XCTAssertFalse(model.rememberPassword, "\(kind) / \(code)")
+
+                model.password = "replacement-secret"
+                await model.submitCredentials()
+                guard case .connect(let id, let username, let password, let remember) = fake.commands.last else {
+                    return XCTFail("Missing recovery connection")
+                }
+                XCTAssertEqual(id, state.profiles[0].id)
+                XCTAssertNil(username)
+                XCTAssertEqual(password, "replacement-secret")
+                XCTAssertFalse(remember)
+                XCTAssertNil(model.modal)
+                XCTAssertFalse(model.credentialsNeedPassword)
+            }
+        }
+    }
+
+    func testUsernameOnlySavedSecretFailureUsesPersistedUsernameThenRecoversPassword() async throws {
+        let (model, fake, initial) = try setup(); var initialState = initial
+        initialState.profiles[0].authKind = .usernamePassword
+        initialState.profiles[0].username = ""
+        initialState.profiles[0].remembered = true
+        var persistedState = initialState
+        persistedState.profiles[0].username = "saved-user"
+        model.accept(initialState)
+        fake.replies = [
+            BackendResult(snapshot: persistedState, failure: AppError("keychain", "Saved secret unavailable")),
+            BackendResult(snapshot: persistedState),
+        ]
+
         await model.toggle()
-        XCTAssertEqual(model.modal, .credentials(state.profiles[0].id)); XCTAssertEqual(model.error, "")
+        XCTAssertTrue(model.credentialsNeedUsername)
+        XCTAssertFalse(model.credentialsNeedPassword)
+        model.username = "saved-user"
+        await model.submitCredentials()
+
+        XCTAssertFalse(model.credentialsNeedUsername)
+        XCTAssertTrue(model.credentialsNeedPassword)
+        XCTAssertEqual(model.username, "")
+        model.password = "replacement-secret"
+        await model.submitCredentials()
+        guard case .connect(_, let username, let password, let remember) = fake.commands.last else {
+            return XCTFail("Missing recovery connection")
+        }
+        XCTAssertNil(username)
+        XCTAssertEqual(password, "replacement-secret")
+        XCTAssertFalse(remember)
+        XCTAssertNil(model.modal)
+    }
+
+    func testCredentialRecoveryResetsOnCloseAndProfileChange() async throws {
+        let (model, fake, initial) = try setup(); var state = initial
+        state.profiles[0].remembered = true
+        var other = state.profiles[0]; other.id = UUID().uuidString.lowercased(); other.remembered = true
+        state.profiles.append(other)
+        model.accept(state)
+        fake.reply = BackendResult(snapshot: state, failure: AppError("credentials_required", "Saved secret unavailable"))
+
+        await model.connect(state.profiles[0])
+        XCTAssertTrue(model.credentialsNeedPassword)
+        model.username = "draft-user"; model.password = "draft-password"; model.rememberPassword = true
+        model.closeModal()
+        XCTAssertEqual(model.username, "")
+        XCTAssertEqual(model.password, "")
+        XCTAssertFalse(model.rememberPassword)
+        model.openModal(.credentials(state.profiles[0].id))
+        XCTAssertFalse(model.credentialsNeedPassword)
+        model.openModal(.credentials(other.id))
+        XCTAssertFalse(model.credentialsNeedPassword)
+        XCTAssertEqual(model.username, "")
+        XCTAssertEqual(model.password, "")
     }
 
     func testHelperUnavailableRoutesToSettings() async throws {

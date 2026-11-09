@@ -103,6 +103,15 @@ final class SceneTests:XCTestCase {
         XCTAssertTrue(try XCTUnwrap(dialog.scene.hits.first { $0.action == .submitCredentials }).enabled)
     }
 
+    func testProfileDialogInitialFocusFollowsModalType() {
+        let id = "synthetic"
+        let available: Set<String> = ["name", "username", "password"]
+        XCTAssertEqual(ProfileDialog.preferredInitialInputKey(for:.credentials(id), available:available), "username")
+        XCTAssertEqual(ProfileDialog.preferredInitialInputKey(for:.credentials(id), available:["name", "password"]), "password")
+        XCTAssertEqual(ProfileDialog.preferredInitialInputKey(for:.settings(id), available:available), "name")
+        XCTAssertEqual(ProfileDialog.preferredInitialInputKey(for:.delete(id), available:available), "username")
+    }
+
     func testTextInputUsesCenteredLineHeightWhileEditingAndResizing() {
         for secure in [false,true] {
             for fontSize:CGFloat in [12,13] {

@@ -33,8 +33,8 @@ def main():
             summary = json.loads(report.stdout)
             count = summary.get("totalTestCount", 0)
             print(f"core: executed {count} tests; {summary.get('passedTests', 0)} passed; {summary.get('failedTests', 0)} failed")
-            if count != 131 or summary.get("skippedTests", 0) or summary.get("failedTests", 0):
-                print("Expected 131 executed tests with no skips or failures.")
+            if count != 133 or summary.get("skippedTests", 0) or summary.get("failedTests", 0):
+                print("Expected 133 executed tests with no skips or failures.")
                 status = status or 1
         else:
             print("Could not verify executed core test count.")

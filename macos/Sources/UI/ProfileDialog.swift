@@ -332,8 +332,17 @@ final class ProfileDialog: NSView {
         default: break
         }
     }
+    static func preferredInitialInputKey(for modal:WorkspaceModal,available:Set<String>) -> String? {
+        let order:[String]
+        switch modal {
+        case .credentials: order = ["username","password"]
+        case .settings: order = ["name","username","password"]
+        case .delete: order = ["username","password","name"]
+        }
+        return order.first { available.contains($0) }
+    }
     func focusInitial() {
-        if let field = inputs["username"] ?? inputs["password"] ?? inputs["name"] { field.focus() }
+        if let key = Self.preferredInitialInputKey(for:modal,available:Set(inputs.keys)),let field = inputs[key] { field.focus() }
         else { window?.makeFirstResponder(self) }
     }
     func clearSecrets() { inputs["password"]?.clear() }

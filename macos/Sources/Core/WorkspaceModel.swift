@@ -27,6 +27,7 @@ final class WorkspaceModel {
     var username = ""
     var rememberPassword = false
     var passwordVisible = false
+    private var credentialRecoveryID: String?
     @ObservationIgnored private var pollTask: Task<Void, Never>?
     @ObservationIgnored private var toastTask: Task<Void, Never>?
 
@@ -66,23 +67,41 @@ final class WorkspaceModel {
     }
     var credentialsNeedPassword: Bool {
         guard let profile = modalProfile else { return false }
-        return profile.authKind != .certificate && !profile.remembered
+        return profile.authKind != .certificate && (!profile.remembered || credentialRecoveryID == profile.id)
     }
 
     func accept(_ snapshot: Snapshot) {
         state = snapshot
         if !state.profiles.contains(where: { $0.id == selectedID }) { selectedID = state.profiles.first?.id ?? "" }
+        if let credentialRecoveryID,
+           !state.profiles.contains(where: { $0.id == credentialRecoveryID && $0.authKind != .certificate }) {
+            self.credentialRecoveryID = nil
+        }
         loaded = true
     }
 
     func openModal(_ modal: WorkspaceModal) {
         guard !busy else { return }
+        credentialRecoveryID = nil
         self.modal = modal; modalError = ""; username = ""; password = ""; passwordVisible = false; rememberPassword = false
     }
 
     func closeModal() {
         guard !busy else { return }
+        credentialRecoveryID = nil
         modal = nil; modalError = ""; username = ""; password = ""; passwordVisible = false; rememberPassword = false
+    }
+
+    private func beginCredentialRecovery(_ id: String, fallbackUsername: String? = nil, error: String = "") {
+        let persistedUsername = state.profiles.first { $0.id == id }?.username
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        credentialRecoveryID = id
+        modal = .credentials(id)
+        modalError = error
+        username = persistedUsername.isEmpty ? (fallbackUsername ?? "") : ""
+        password = ""
+        passwordVisible = false
+        rememberPassword = false
     }
 
     func refresh(credentials: Bool = false) async {
@@ -145,8 +164,12 @@ final class WorkspaceModel {
         connectingID = profile.id
         defer { connectingID = nil }
         let result = await perform(.connect(id: profile.id, username: nil, password: nil, remember: false))
-        if let failure = result?.failure, ["credentials_required", "keychain", "username_required"].contains(failure.code) {
-            error = ""; openModal(.credentials(profile.id))
+        if let failure = result?.failure {
+            if ["credentials_required", "keychain"].contains(failure.code) {
+                error = ""; beginCredentialRecovery(profile.id, error: failure.message)
+            } else if failure.code == "username_required" {
+                error = ""; openModal(.credentials(profile.id))
+            }
         }
     }
 
@@ -164,8 +187,12 @@ final class WorkspaceModel {
         let remember = rememberPassword && modalProfile?.allowPasswordSave == true
         username = ""; password = ""; connectingID = id
         defer { connectingID = nil }
-        if let result = await perform(.connect(id: id, username: submittedUsername, password: secret, remember: remember), inModal: true), result.failure == nil {
-            closeModal()
+        if let result = await perform(.connect(id: id, username: submittedUsername, password: secret, remember: remember), inModal: true) {
+            if result.failure == nil {
+                closeModal()
+            } else if let failure = result.failure, ["credentials_required", "keychain"].contains(failure.code) {
+                beginCredentialRecovery(id, fallbackUsername: submittedUsername, error: failure.message)
+            }
         }
     }
 
