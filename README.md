@@ -1,364 +1,78 @@
 # VueVPN
 
-A personal OpenVPN client for macOS Apple Silicon: **Swift/AppKit → Objective-C++ → embedded OpenVPN 3 Core**. No separate OpenVPN CLI installation is required.
+A personal OpenVPN client for **macOS 26+ on Apple Silicon**, built with
+Swift/AppKit and embedded OpenVPN 3 Core.
 
-The app provides a 960 × 720 window, `.ovpn` profiles, PIN/password authentication with optional Keychain storage, a native menu bar, simultaneous connections, per-profile IPv4 routing, and DNS settings supplied by the VPN server.
+- Import `.ovpn` profiles with PIN/password authentication and optional Keychain storage.
+- Use one full IPv4 tunnel or compatible simultaneous split tunnels.
+- Monitor CPU, RAM, SSD, and Network with live charts and menu-bar controls.
+- Choose Light, Dark, or System appearance.
 
-The previous Vue/TypeScript UI and Rust/Tauri backend have been removed. The app
-is still called VueVPN. See [AGENTS.md](AGENTS.md) for coding-agent guidance and
-[docs/NATIVE_MIGRATION.md](docs/NATIVE_MIGRATION.md) for migration history and
-validation limits.
+## Setup and build
 
-## Running a packaged build
+Install **full Xcode 26 (Swift 6)**, Python 3, and Homebrew. Open Xcode once to
+finish setup, and ensure `xcode-select -p` points to full Xcode.
 
-1. Copy `artifacts/VueVPN.app` to `/Applications`.
-2. Open the app manually. Choose **App settings → Enable VPN helper**.
-3. If prompted, allow VueVPN in **System Settings → General → Login Items & Extensions**, then click **Refresh status**.
-4. Import a development `.ovpn` profile. Select it, review its subnets, and click **Connect to VPN**.
-5. Enter your PIN/password. Select **Remember on this Mac** to save it after a successful connection.
-
-This local build targets **macOS 26.0+ arm64**, matching the native dependencies available on the build machine. The helper uses APIs available from macOS 13, but the local OpenSSL binaries require macOS 26. Supporting older macOS versions requires rebuilding native dependencies for the intended deployment target.
-
-Closing the window hides it. The app and VPN keep running through the menu bar.
-**Quit VueVPN** cleans up connections before exiting. Opening the app does not
-automatically connect any profile.
-
-## Appearance and interaction
-
-Choose **App settings → Appearance → Light / Dark / System**. The default,
-**System**, follows macOS appearance changes immediately. Light and Dark retain
-the selected theme when the system appearance changes. The preference is saved
-for the app, applies to every profile, and requires no restart or VPN reconnect.
-
-Dark uses a deep green palette. Inputs, dialogs, diagrams, statistics, and toast
-messages follow the app theme; native menus and the menu bar follow macOS.
-Clickable controls use a pointing-hand cursor, disabled controls use an arrow,
-and text inputs use an I-beam. Standard menus and window controls retain their
-native macOS behavior.
-
-Connection animations use Core Animation layers without a timer redrawing the
-entire Overview every frame. Traffic and duration values update separately,
-about once per second. Workspace rendering pauses when the window is hidden,
-minimized, fully occluded, or covered by a dialog; menu-bar controls and VPN
-connections remain active. Animation also pauses when its illustration scrolls
-out of view. Low Power Mode retains normal animation, while Reduce Motion is
-respected.
-
-## System Stats
-
-The sidebar's **Stats** section opens CPU, RAM, SSD, and Network pages with
-distinct chip, memory-module, drive, and globe icons. Four compact menu-bar
-controls show RAM, SSD, Network download/upload, and CPU readings in one native
-Stats item. The four controls cannot be dragged or reordered separately in
-macOS; the VPN item remains separate.
-In Label style, RAM, SSD, and CPU align each small label with the left edge of its percentage; Network stacks
-direction-labelled download and upload rates with units. Each metric keeps
-its compact width as readings change; exceptionally high rates display as
-`999+GB/s`. Clicking
-one restores the existing VueVPN window on that page. Stats works with no VPN
-connection and with the VPN helper disabled. The original VPN icon and menu
-remain separate. Each Stats page has a **Show in menu bar** checkbox for its
-own metric; all four are shown by default, and choices persist across restarts.
-Each page also has an independent **Menu bar style: Label / Icon** choice, saved across restarts and available while hidden. Label is the default; Icon shows the value beside a green metric icon (Network keeps both rate rows beside a globe). Fixed columns keep icons steady as values change; Icon values align by their visible right edge close to the icon. Menu-bar colors follow the status item appearance independently of the window theme.
-Hiding an item frees its menu-bar space while readings and history continue in
-the app. Each page also has an independent **Enable monitoring** setting,
-on by default and saved across restarts. Turning it off stops that domain's
-Stats collection and related process or network work, hides its tray metric,
-and shows a disabled state on its still-accessible page. It preserves the
-separate visibility and style choices for when monitoring resumes. With all
-four off, the Stats polling timer stops. VPN connections and their own polling
-are independent of these controls. The sidebar scrolls when profiles extend past the window.
-Switching Stats pages or hiding the window keeps the latest aggregate menu-bar
-readings until the next sample; genuinely unavailable readings still show an
-em dash.
-
-Each page starts with a live summary: CPU, RAM, and SSD use a composition ring and bar with their values in the card; Network shows download and upload rates. The five-minute history and distinct details remain below. Unavailable or inconsistent compositions use a neutral track. The charts update immediately without motion; Low Power Mode changes sampling cadence as described below.
-
-CPU shows total/system/user/idle percentages, available per-core and E/P group
-readings, uptime, load averages, a five-minute chart, and accessible processes.
-Live CPU frequency is **Unavailable** on Apple Silicon without a supported
-public API. RAM shows pressure, App/Wired/Compressed/Free memory, swap, history,
-and processes. SSD shows the internal macOS filesystem's actual available space
-and used percentage, read/write rates when its driver exposes counters, history,
-and processes. Reclaimable space is shown only when a reliable estimate exists;
-it is never treated as already free. Disk process I/O is system-wide, not scoped
-to the selected filesystem.
-
-Network follows the active physical Wi-Fi or Ethernet interface. Use the
-**Interface** control to cycle through automatic selection and available physical
-interfaces. Its rates and application-session totals come from the selected
-interface; VPN tunnel bytes are not added. Totals count traffic observed while
-Network monitoring is enabled, are retained per interface when switching or
-temporarily disabling monitoring, and reset when the app restarts. Local addresses and hardware
-address appear when available; Wi-Fi name/SSID is not read. Process network I/O
-is system-wide and cannot be attributed to the selected interface.
-
-Public IPv4/IPv6 uses normal OS routing, so it describes the current routed
-egress, including VPN changes. VueVPN requests plain address text over HTTPS
-from `api4.ipify.org` and `api6.ipify.org` at monitoring start, physical-link or
-VPN-context changes, and when **Refresh public IP** is clicked. It does not poll
-these providers periodically or send profile data. The page labels pending,
-stale, unavailable, and failed lookups and shows the last successful update.
-Connectivity checks a configurable target, initially `1.1.1.1`, using TCP port
-443 every five seconds only while Network is visible. Three failures mean that
-target is unreachable; they do not establish that every internet destination is
-down. Hidden periods are marked unmonitored.
-
-Lightweight aggregate readings share one schedule: about one second normally,
-two seconds in Low Power Mode. Visible-page process lists update about every
-three or five seconds respectively. SSD capacity updates every 30 seconds.
-Sleep/display sleep pauses collection; wake resets rate baselines. Resuming a
-disabled domain also starts with fresh rate baselines and marks a gap in its
-bounded history. All chart history lasts at most five minutes in memory and is cleared on quit. Low Power
-Mode changes only Stats sampling; VPN animation keeps its existing behavior.
-Some hardware or protected-process readings may show **Unavailable**. Actual
-energy use and hardware accuracy must be checked manually on the target Mac.
-
-## Updating the app
-
-Quit the old VueVPN app, replace `/Applications/VueVPN.app` with the new
-`artifacts/VueVPN.app`, and reopen it. **Routine updates do not require disabling
-and re-enabling the helper**, including upgrades from versions without helper
-version detection.
-
-The app compares the signed helper executable's fingerprint in the bundle with
-the running helper's fingerprint over XPC. If they differ, it waits for all VPN
-connections to disconnect, unregisters the service, waits for macOS to confirm
-that the old process has stopped, and registers it again. New connections are
-allowed after the new helper's fingerprint is verified. UI-only changes with an
-unchanged helper executable do not restart the helper.
-
-When a VPN is active, **update pending** is shown and connections continue until
-the user disconnects. **Disconnect all and update** is available in App settings.
-Profiles and PINs stored in Keychain are preserved. Grant approval in System
-Settings if macOS requests it. A deliberately disabled helper is not enabled
-automatically. Wait for an update to finish before quitting.
-
-A **not found** status with a complete bundle is treated as a registration that
-needs recovery: the app checks the signed executable and plist, then attempts
-automatic registration. After the previous helper stops, registration continues
-with a fresh SMAppService instance. Temporary registration failures are retried
-up to three times with delays; the status remains **updating** until the helper's
-fingerprint is verified. A helper deliberately left unregistered still requires
-Enable, unless registration was lost during an update or the user selects Retry.
-
-Disconnect sends an asynchronous signal to the engine, including during sleep
-or network changes. Core stops its event loop after shutdown so pending work
-cannot keep `connect()` running indefinitely. The transport closes before its
-bypass routes are released. If Disconnecting lasts 30 seconds, the app shows
-**Disconnect stalled** and **Retry disconnect**. A timeout does not count as
-success: session/route ownership is retained, replacement connections are
-rejected, and helper updates wait for cleanup. Retry does not restart the helper
-or disconnect other profiles.
-
-Persistent update failures offer **Retry helper update**, which resumes
-registration without requiring another Enable click. Unregister/register retries
-are bounded. An unreachable helper is not stopped immediately because the app
-cannot yet confirm the state of its connections. Bundle detection applies only
-to a complete, signed `.app`; an unsigned compilation is not a ready-to-use
-bundle and must not be used for live VPN testing.
-
-## Profiles and routing
-
-- Pritunl profiles with a client certificate/key and `password_mode: pin` use a PIN and the username from profile metadata. Standard `auth-user-pass` profiles without a client certificate/key are also supported, including profiles with inline CA and `tls-auth`. Set or change the username in **Edit profile**. A client certificate and key must be supplied together; explicit client-certificate requirements remain in effect.
-- Profiles containing `route-nopull` and explicit routes start in **Selected networks** mode. Other profiles start in **All IPv4 traffic** mode.
-- The editor accepts prefixes (`24`, `/24`) or subnet masks (`255.255.255.0`). Addresses are normalized to network addresses.
-- Only one full IPv4 tunnel can be active. Other split-tunnel profiles may run concurrently if their subnets and DNS domains do not overlap.
-- The backend supports IPv4 DNS and stored domain suffixes; empty settings use server-provided values. In Selected networks mode, automatic DNS without a domain suffix is ignored, retaining system DNS without adding routes to VPN resolvers. Internal hostnames require a stored or server-provided suffix; manually configured DNS without a suffix is rejected. Resolver IPs in use are also routed through the VPN. Internal DNS controls are temporarily hidden from Overview and Profile settings. Editing a profile preserves stored DNS settings, and backend handling of server-provided DNS remains active. All IPv4 mode can use server DNS without requiring a suffix.
-- Server-pushed routes do not select the routing mode: VueVPN's settings determine it.
-- Saving network changes to an active profile reconnects only that profile.
-- IPv6 is neither modified nor blocked. A full tunnel covers **IPv4**, except for VPN transport, local/peer interface addresses, and more-specific local-network routes owned by macOS. There is no kill switch.
-- Ordinary connection failures allow five retries with 2/4/8/16/30-second backoff. Offline/sleep states pause attempts. Network changes and temporary network errors reset the counter, so waiting for network recovery is not limited to five total attempts. Authentication, certificate, and configuration errors stop retries.
-- Profiles with legacy compression framing, including `comp-lzo no`, use receive-only compatibility mode. VueVPN does not compress outgoing data but can receive compressed data from these servers. Profiles without compression directives retain mode `no`; `allow-compression no` is always respected.
-
-## Local data
-
-Profiles are stored in `~/Library/Application Support/com.vuevpn.desktop/profiles`,
-with directory permissions `0700` and file permissions `0600`. Referenced
-certificate/key files are imported inline without changing the originals.
-Pritunl synchronization metadata is not stored. Passwords are never written to
-JSON or logs. Appearance preferences use UserDefaults, separately from Keychain
-credentials.
-
-Remembered passwords use macOS Keychain service
-`com.vuevpn.desktop.credentials`. **Forget password** removes them. Passwords
-rejected by the server are deleted so the next connection requests credentials
-again. Without the remember option, credentials are retained only in memory for
-reconnections within the current session.
-
-The helper runs separately with administrator privileges. XPC communication
-requires matching signing identifiers and Team IDs in both directions, as well
-as the active console user. The UI does not run as root. The helper accepts
-neither shell commands nor file paths from the UI; profiles are restricted to
-supported inline configuration.
-
-## Development and builds
-
-Run all commands from the repository root. Requirements: Apple Silicon,
-macOS 26+, full Xcode 26 with Swift 6 and the macOS SDK, Python 3, CMake, Asio,
-OpenSSL 3, and LZ4. Build scripts look for Homebrew dependencies in
-`/opt/homebrew`. Node.js, npm, Rust, Tauri, WebView, and the OpenVPN CLI are not
-required.
-
-Examples use `rtk proxy`, a CLI wrapper in the developer workspace. RTK is not a
-dependency of the app or build scripts. If RTK is unavailable, run the same
-commands without the `rtk proxy` prefix.
-
-Ensure the developer directory points to full Xcode, not just Command Line
-Tools. Check the toolchain before building:
+Run from the cloned repository root:
 
 ```sh
-rtk proxy xcode-select -p
-rtk proxy xcodebuild -version
-rtk proxy python3 --version
+brew install cmake asio openssl@3 lz4
+python3 scripts/package.py
 ```
 
-Install dependencies if needed:
+Packaging requires an **Apple Development** or **Developer ID Application**
+certificate and its private key in Keychain. It selects the identity automatically
+when exactly one matches; otherwise set `VUEVPN_SIGNING_IDENTITY` to its SHA-1.
+Keep the same signing Team for updates.
+
+The script downloads the pinned OpenVPN Core, builds the app/helper, bundles
+libraries, and signs the result at **`artifacts/VueVPN.app`**. It does not launch
+the app, register the helper, or notarize the package.
+
+Node.js, npm, Rust, and the OpenVPN CLI are not required. On the original
+developer workspace, prefix shell commands with `rtk proxy`; other Macs do not
+need RTK.
+
+## Run and update
+
+1. Copy `artifacts/VueVPN.app` to `/Applications` and open it.
+2. Choose **App settings → Enable VPN helper**.
+3. If prompted, approve VueVPN in **System Settings → General → Login Items &
+   Extensions**, then click **Refresh status**.
+4. Import an `.ovpn` profile, review its routing, and connect.
+
+Closing the window keeps the app and VPN running in the menu bar.
+Use **Quit VueVPN** to disconnect and exit.
+
+For updates, quit, replace the app, and reopen it. Helper updates are automatic
+after active connections disconnect; routine updates do not require toggling the helper.
+
+## Development and tests
 
 ```sh
-rtk proxy brew install cmake asio openssl@3 lz4
-rtk proxy python3 scripts/native.py prepare
+# Compile without signing; output lacks the complete VPN helper bundle.
+python3 scripts/build.py
+
+# Build a complete signed package with a Debug Swift app.
+python3 scripts/package.py --configuration Debug
+
+# Run tests sequentially without opening the app or connecting a VPN.
+python3 scripts/test_core.py
+python3 scripts/test_ui.py all
+python3 scripts/native.py test
 ```
 
-OpenVPN Core is pinned to the commit in `scripts/native.py`; IPv4 endpoint patches
-are applied from `native/patches/`. The first prepare requires network access to
-download the source. Native build/test commands also run prepare and verify the
-pin and patches. Vendor files are not committed.
+Edit `macos/VueVPN.xcodeproj`. After adding or removing Swift files, run
+`python3 scripts/sync_sources.py` and include the generated project changes.
 
-Build a Release package with the helper and all libraries, without opening the app:
+## Limits and documentation
 
-```sh
-rtk proxy python3 scripts/package.py
-```
+IPv4 TUN only. IPv6 is neither tunneled nor blocked; there is no kill switch.
+TAP, SSO, OTP/dynamic challenges, and encrypted private keys are unsupported.
 
-The script automatically selects a signing identity when exactly one Apple
-Development or Developer ID Application identity is available. Otherwise, set
-`VUEVPN_SIGNING_IDENTITY` to the desired identity's SHA-1. Packaging requires the
-identity and its private key in Keychain; unsigned compilation and unit tests
-remain available without an identity. Use the same identity/Team as previous
-builds. Local signing does not notarize or publish the app. The script verifies
-app/helper signatures and dependencies before replacing the previous build
-artifact.
-
-The package for manual testing is **`artifacts/VueVPN.app`**. Quit the old app,
-copy this package to `/Applications`, and open it manually. Building does not
-register or start the helper.
-
-For a Debug Swift application with the complete helper bundle:
-
-```sh
-rtk proxy python3 scripts/package.py --configuration Debug
-```
-
-Use the same launch workflow: copy the package to `/Applications` and open it
-manually. There is no frontend server or hot reload. Edit the project in
-`macos/VueVPN.xcodeproj`. The `--configuration Debug` option applies to the Swift
-app; `scripts/native.py` still builds the helper/OpenVPN in Release configuration.
-For a quick compilation without packaging/signing:
-
-```sh
-rtk proxy python3 scripts/build.py
-```
-
-The output at `macos/build/Build/Products/Debug/VueVPN.app` does not contain the
-complete helper bundle; use the packaged output to test connections. After
-adding or removing Swift files, run:
-
-```sh
-rtk proxy python3 scripts/sync_sources.py
-```
-
-Commit changes to `macos/VueVPN.xcodeproj/project.pbxproj` together with the Swift
-files. Build logs are written to `artifacts/build/`.
-
-## Code map
-
-| Location | Responsibility |
-| --- | --- |
-| `macos/Sources/App/` | App lifecycle, window, and user-action coordination |
-| `macos/Sources/UI/` | AppKit views, drawing, themes, inputs, animations, and menu bar |
-| `macos/Sources/Core/` | State, profiles, routing policy, session credentials, and helper updater |
-| `macos/Sources/Bridge/` + `native/src/AppBridge.mm` | Swift/Objective-C++ bridge, XPC, Keychain, and helper registration |
-| `native/src/Engine.mm` | OpenVPN sessions, connect/reconnect/disconnect, and statistics |
-| `native/src/Network.mm` + `native/src/Connectivity.mm` | TUN, routes/DNS, ownership journal, and network changes |
-| `native/src/Helper.mm` | Privileged service, XPC authorization, and sleep/wake notifications |
-| `macos/CoreTests/`, `macos/VisualTests/`, `native/tests/` | Unit tests with synthetic data and frozen image references |
-| `scripts/` | Prepare, Xcode synchronization, build, packaging, and test runners |
-
-## Testing without opening the app
-
-```sh
-rtk proxy python3 scripts/test_core.py
-rtk proxy python3 scripts/test_ui.py all
-rtk proxy python3 scripts/native.py test
-```
-
-Core tests use fake XPC/Keychain, synthetic clocks, and temporary storage. UI
-tests use offscreen AppKit/CoreGraphics without an NSWindow or application event
-loop. Four native suites test policy, the OpenVPN parser, lifecycle, and network
-ownership using fake dependencies. Tests do not start the root helper, modify
-live routes/DNS/Keychain, or establish VPN connections.
-
-Run Xcode build/test scripts sequentially because they share `macos/build`.
-For focused changes, the UI runner accepts phases such as `behavior`, `theme`,
-`energy`, and `performance`; see `rtk proxy python3 scripts/test_ui.py --help`.
-Logs, `.xcresult` bundles, and image comparisons are written to
-`artifacts/migration/`; CTest results are in `native/build/Testing/Temporary/`.
-Runners verify test counts and reject skipped tests. Update the expected counts
-when test coverage changes.
-
-Native image comparisons use frozen references from the previous UI, targeting
-at least **95%** matching pixels with a **2/255 per-channel** color tolerance for
-dithering. Exact pixel differences are also reported. Results, coverage, and
-validation limits are documented in `docs/NATIVE_MIGRATION.md`. References are
-not application resources.
-
-Actual windows, mouse/keyboard interaction, macOS approval, Keychain,
-authentication, VPN traffic, sleep/wake, and Wi-Fi switching require manual user
-verification through [docs/MANUAL_TEST.md](docs/MANUAL_TEST.md). Unit test results
-do not establish live connectivity.
-
-## Troubleshooting a stalled disconnect
-
-If **Disconnect stalled** appears, choose **Retry disconnect**. The session is
-not considered complete, and helper updates remain deferred until cleanup is
-confirmed. If the error persists, record the Activity message and sample the
-helper while it is still stuck:
-
-```sh
-rtk proxy sudo sample vuevpn-helper 5 10 -file /tmp/vuevpn-helper-disconnect.txt
-```
-
-Sampling only records thread activity. For an older helper version that is
-already stuck, the user can perform a one-time service restart:
-
-```sh
-rtk proxy sudo launchctl kickstart -k system/com.vuevpn.helper
-```
-
-This disconnects **all VueVPN sessions**, including other profiles. It is a
-manual recovery action, not part of routine builds, tests, or updates. Once the
-helper responds again, quit the old app, replace it with the new build, and open
-it manually. If recovery fails, retain the diagnostics for investigation. Do not
-bulk-delete routes or delete the ownership journal.
-
-## Support limits
-
-Supported: IPv4 TUN with inline client certificate/key authentication (optionally with PIN/password), or username/password authentication without a client certificate.
-TAP, external PKI, encrypted private keys, OTP/dynamic challenges, SSO, device
-authentication, Pritunl dynamic firewall, scripts/plugins, proxies, and chained
-external configurations are not supported. Specific errors are reported during
-import or native validation before connecting.
-
-## Uninstalling
-
-Choose **App settings → Disable helper and disconnect all**, then Quit. Delete
-`/Applications/VueVPN.app` afterward. Remove profiles through the UI first if you
-also want their Keychain credentials deleted; original `.ovpn` files are
-preserved. The helper's route journal at
-`/var/run/com.vuevpn.helper/routes.json` stores route ownership only, without
-credentials.
-
-If route cleanup fails, the app reports an error and does not claim cleanup has
-finished. Complete cleanup or helper recovery before deleting the app; see the
-troubleshooting section above.
+- [User guide](docs/USER_GUIDE.md): Stats, profiles, routing, local data, updates,
+  troubleshooting, and uninstalling.
+- [Development guide](docs/DEVELOPMENT.md): build/signing details, code map,
+  test commands, and logs.
+- [Manual checks](docs/MANUAL_TEST.md) · [Migration notes](docs/NATIVE_MIGRATION.md) ·
+  [Third-party notices](docs/THIRD_PARTY.md) · [Agent instructions](AGENTS.md).
