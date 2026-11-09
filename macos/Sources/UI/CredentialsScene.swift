@@ -17,21 +17,36 @@ import AppKit
 /// It receives only whether a password is present, never the password itself.
 @MainActor struct CredentialsScene {
     var scene:WorkspaceScene
+    var usernameRect:CGRect?
     var passwordRect:CGRect
     var bottom:CGFloat
 
     static func make(profile:Profile,width:CGFloat,top:CGFloat,busy:Bool,
-                     hasPassword:Bool,visible:Bool,remember:Bool,error:String,focused:Bool = false,palette:ThemePalette = .light) -> CredentialsScene {
+                     needsUsername:Bool = false,hasUsername:Bool = false,
+                     needsPassword:Bool = true,hasPassword:Bool,visible:Bool,remember:Bool,error:String,
+                     focusedUsername:Bool = false,focusedPassword:Bool = false,palette:ThemePalette = .light) -> CredentialsScene {
         var scene = WorkspaceScene(palette:palette),y = top
         let inner = max(1,width-52)
-        scene.text(profile.authKind == .pin ? "Profile PIN / password" : "Password",x:26,y:y+12,size:11,weight:550,color:palette[.secondaryText, light:0x6f7d66])
-        y += 23
-        let rect = CGRect(x:26,y:y,width:inner,height:40)
-        scene.custom { VPNDrawing.emptyPasswordField(in:rect,focused:focused,palette:palette,context:$0) }
-        let passwordRect = CGRect(x:61,y:y+1,width:inner-80,height:38)
-        scene.hits.append(WorkspaceHitRegion(rect:CGRect(x:width-63,y:y+6,width:28,height:28),title:visible ? "Hide password" : "Show password",action:.togglePassword,enabled:!busy))
-        y += 54
-        if profile.allowPasswordSave {
+        var usernameRect:CGRect?
+        if needsUsername {
+            scene.text("Username",x:26,y:y+12,size:11,weight:550,color:palette[.secondaryText, light:0x6f7d66])
+            y += 23
+            let rect = CGRect(x:26,y:y,width:inner,height:40)
+            scene.box(rect,radius:9,fill:palette[.surface, light:0xffffff],border:focusedUsername ? palette[.focusBorder, light:0xa8afa4] : palette[.border, light:0xe5e9df])
+            usernameRect = CGRect(x:36,y:y+1,width:inner-20,height:38)
+            y += 54
+        }
+        var passwordRect = CGRect.zero
+        if needsPassword {
+            scene.text(profile.authKind == .pin ? "Profile PIN / password" : "Password",x:26,y:y+12,size:11,weight:550,color:palette[.secondaryText, light:0x6f7d66])
+            y += 23
+            let rect = CGRect(x:26,y:y,width:inner,height:40)
+            scene.custom { VPNDrawing.emptyPasswordField(in:rect,focused:focusedPassword,palette:palette,context:$0) }
+            passwordRect = CGRect(x:61,y:y+1,width:inner-80,height:38)
+            scene.hits.append(WorkspaceHitRegion(rect:CGRect(x:width-63,y:y+6,width:28,height:28),title:visible ? "Hide password" : "Show password",action:.togglePassword,enabled:!busy))
+            y += 54
+        }
+        if needsPassword && profile.allowPasswordSave {
             let checkbox = CGRect(x:26,y:y+2,width:16,height:16)
             scene.custom { context in
                 let layer = CALayer()
@@ -50,7 +65,7 @@ import AppKit
             scene.text("Saved in macOS Keychain after a successful connection.",x:52,y:y+32,size:10,color:palette[.secondaryText, light:0x77847b])
             scene.hits.append(WorkspaceHitRegion(rect:CGRect(x:26,y:y,width:inner,height:36),title:"Remember on this Mac",action:.toggleRemember,enabled:!busy,role:.checkbox,checked:remember))
             y += 36
-        } else {
+        } else if needsPassword {
             y += scene.paragraph("This profile does not allow passwords to be saved.",x:26,y:y,width:inner)
         }
         if !error.isEmpty { y += 19+scene.paragraph(error,x:26,y:y+21,width:inner,size:11,lineHeight:18,color:palette[.errorText, light:0xa64035]) }
@@ -59,7 +74,8 @@ import AppKit
         let connectWidth = max(98,ceil(VPNDrawing.textWidth(label,size:12,weight:550)*64)/64+59)
         let cancelWidth = max(98,ceil(VPNDrawing.textWidth("Cancel",size:12,weight:550)*64)/64+36)
         scene.button("Cancel",x:width-26-connectWidth-cancelWidth-10,y:y,action:.closeModal,enabled:!busy,fixedWidth:cancelWidth,fontSize:12)
-        scene.button(label,x:width-26-connectWidth,y:y,action:.submitCredentials,style:.primary,icon:.power,enabled:!busy && hasPassword,fixedWidth:connectWidth,fontSize:12)
-        return CredentialsScene(scene:scene,passwordRect:passwordRect,bottom:y+42)
+        scene.button(label,x:width-26-connectWidth,y:y,action:.submitCredentials,style:.primary,icon:.power,
+                     enabled:!busy && (!needsUsername || hasUsername) && (!needsPassword || hasPassword),fixedWidth:connectWidth,fontSize:12)
+        return CredentialsScene(scene:scene,usernameRect:usernameRect,passwordRect:passwordRect,bottom:y+42)
     }
 }

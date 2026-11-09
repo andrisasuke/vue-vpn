@@ -10,7 +10,7 @@ Detailed application behavior and user-run troubleshooting. For setup and build 
 2. Open the app manually. Choose **App settings → Enable VPN helper**.
 3. If prompted, allow VueVPN in **System Settings → General → Login Items & Extensions**, then click **Refresh status**.
 4. Import a development `.ovpn` profile. Select it, review its subnets, and click **Connect to VPN**.
-5. Enter your PIN/password. Select **Remember on this Mac** to save it after a successful connection.
+5. Enter your PIN/password. For an imported username/password profile without a username, enter both values on its first connection; the username is saved with the profile. Select **Remember on this Mac** to save only the password after a successful connection.
 
 This local build targets **macOS 26.0+ arm64**, matching the native dependencies available on the build machine. The helper uses APIs available from macOS 13, but the local OpenSSL binaries require macOS 26. Supporting older macOS versions requires rebuilding native dependencies for the intended deployment target.
 
@@ -155,7 +155,7 @@ bundle and must not be used for live VPN testing.
 
 ## Profiles and routing
 
-- Pritunl profiles with a client certificate/key and `password_mode: pin` use a PIN and the username from profile metadata. Standard `auth-user-pass` profiles without a client certificate/key are also supported, including profiles with inline CA and `tls-auth`. Set or change the username in **Edit profile**. A client certificate and key must be supplied together; explicit client-certificate requirements remain in effect.
+- Pritunl profiles with a client certificate/key and `password_mode: pin` use a PIN and the username from profile metadata. Standard `auth-user-pass` profiles without a client certificate/key are also supported, including profiles with inline CA and `tls-auth`. If an imported username/password profile has no username, its first Connect asks for a username and password; afterward, Connect asks only for a password unless it is remembered. The username is stored with the profile and can be changed in **Edit profile**. A client certificate and key must be supplied together; explicit client-certificate requirements remain in effect.
 - Profiles containing `route-nopull` and explicit routes start in **Selected networks** mode. Other profiles start in **All IPv4 traffic** mode.
 - The editor accepts prefixes (`24`, `/24`) or subnet masks (`255.255.255.0`). Addresses are normalized to network addresses.
 - Only one full IPv4 tunnel can be active. Other split-tunnel profiles may run concurrently if their subnets and DNS domains do not overlap.

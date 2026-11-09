@@ -3,7 +3,7 @@
 A personal OpenVPN client for **macOS 26+ on Apple Silicon**, built with
 Swift/AppKit and embedded OpenVPN 3 Core.
 
-- Import `.ovpn` profiles with PIN/password authentication and optional Keychain storage.
+- Import `.ovpn` profiles with PIN/password authentication and optional Keychain storage; username/password profiles collect a missing username on first Connect.
 - Use one full IPv4 tunnel or compatible simultaneous split tunnels.
 - Monitor CPU, RAM, SSD, and Network with live charts and menu-bar controls.
 - Choose Light, Dark, or System appearance.

@@ -81,6 +81,28 @@ final class SceneTests:XCTestCase {
         XCTAssertTrue(error.scene.hits.allSatisfy { $0.rect.maxY <= error.bottom })
     }
 
+    func testUsernamePasswordCredentialsRequireBothFieldsAndKeepPasswordOnlyBaseline() throws {
+        var profile = try XCTUnwrap(state().selected); profile.authKind = .usernamePassword
+        let first = CredentialsScene.make(profile:profile,width:480,top:108,busy:false,
+            needsUsername:true,hasUsername:false,needsPassword:true,hasPassword:true,visible:false,remember:false,error:"")
+        XCTAssertNotNil(first.usernameRect); XCTAssertGreaterThan(first.passwordRect.minY, first.usernameRect!.maxY)
+        XCTAssertFalse(try XCTUnwrap(first.scene.hits.first { $0.action == .submitCredentials }).enabled)
+        let later = CredentialsScene.make(profile:profile,width:480,top:108,busy:false,
+            needsUsername:false,needsPassword:true,hasPassword:true,visible:false,remember:false,error:"")
+        XCTAssertNil(later.usernameRect); XCTAssertEqual(later.passwordRect.minY, 132)
+        XCTAssertTrue(try XCTUnwrap(later.scene.hits.first { $0.action == .submitCredentials }).enabled)
+    }
+
+    func testUsernameOnlyCredentialsUseNoPasswordToggle() throws {
+        var profile = try XCTUnwrap(state().selected); profile.authKind = .usernamePassword
+        let dialog = CredentialsScene.make(profile:profile,width:480,top:108,busy:false,
+            needsUsername:true,hasUsername:true,needsPassword:false,hasPassword:false,visible:false,remember:false,error:"")
+        XCTAssertNotNil(dialog.usernameRect); XCTAssertTrue(dialog.passwordRect.isEmpty)
+        XCTAssertFalse(dialog.scene.hits.contains { $0.action == .togglePassword })
+        XCTAssertFalse(dialog.scene.hits.contains { $0.action == .toggleRemember })
+        XCTAssertTrue(try XCTUnwrap(dialog.scene.hits.first { $0.action == .submitCredentials }).enabled)
+    }
+
     func testTextInputUsesCenteredLineHeightWhileEditingAndResizing() {
         for secure in [false,true] {
             for fontSize:CGFloat in [12,13] {

@@ -24,6 +24,7 @@ final class WorkspaceModel {
     private(set) var toast = ""
     var clock = UInt64(Date().timeIntervalSince1970)
     var password = ""
+    var username = ""
     var rememberPassword = false
     var passwordVisible = false
     @ObservationIgnored private var pollTask: Task<Void, Never>?
@@ -59,6 +60,14 @@ final class WorkspaceModel {
         switch modal { case .credentials(let value), .settings(let value), .delete(let value): id = value }
         return state.profiles.first { $0.id == id }
     }
+    var credentialsNeedUsername: Bool {
+        modalProfile?.authKind == .usernamePassword &&
+            modalProfile?.username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true
+    }
+    var credentialsNeedPassword: Bool {
+        guard let profile = modalProfile else { return false }
+        return profile.authKind != .certificate && !profile.remembered
+    }
 
     func accept(_ snapshot: Snapshot) {
         state = snapshot
@@ -68,12 +77,12 @@ final class WorkspaceModel {
 
     func openModal(_ modal: WorkspaceModal) {
         guard !busy else { return }
-        self.modal = modal; modalError = ""; password = ""; passwordVisible = false; rememberPassword = false
+        self.modal = modal; modalError = ""; username = ""; password = ""; passwordVisible = false; rememberPassword = false
     }
 
     func closeModal() {
         guard !busy else { return }
-        modal = nil; modalError = ""; password = ""; passwordVisible = false; rememberPassword = false
+        modal = nil; modalError = ""; username = ""; password = ""; passwordVisible = false; rememberPassword = false
     }
 
     func refresh(credentials: Bool = false) async {
@@ -129,21 +138,33 @@ final class WorkspaceModel {
         guard !busy && !quitting else { return }
         error = ""
         guard state.helper.status == "enabled" else { screen = .setup; return }
-        if profile.authKind != .certificate && !profile.remembered { openModal(.credentials(profile.id)); return }
+        if (profile.authKind == .usernamePassword && profile.username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) ||
+            (profile.authKind != .certificate && !profile.remembered) {
+            openModal(.credentials(profile.id)); return
+        }
         connectingID = profile.id
         defer { connectingID = nil }
-        let result = await perform(.connect(id: profile.id, password: nil, remember: false))
-        if let failure = result?.failure, ["credentials_required", "keychain"].contains(failure.code) {
+        let result = await perform(.connect(id: profile.id, username: nil, password: nil, remember: false))
+        if let failure = result?.failure, ["credentials_required", "keychain", "username_required"].contains(failure.code) {
             error = ""; openModal(.credentials(profile.id))
         }
     }
 
     func submitCredentials() async {
-        guard case .credentials(let id) = modal, !busy && !quitting, !password.isEmpty else { return }
-        let secret = password, remember = rememberPassword && modalProfile?.allowPasswordSave == true
-        password = ""; connectingID = id
+        guard case .credentials(let id) = modal, !busy && !quitting else { return }
+        let needsUsername = credentialsNeedUsername, needsPassword = credentialsNeedPassword
+        if needsUsername {
+            do { _ = try VPNPolicy.username(username, required: true) }
+            catch let error as AppError { modalError = error.message; return }
+            catch { modalError = error.localizedDescription; return }
+        }
+        guard !needsPassword || !password.isEmpty else { return }
+        let submittedUsername = needsUsername ? username : nil
+        let secret = needsPassword ? password : nil
+        let remember = rememberPassword && modalProfile?.allowPasswordSave == true
+        username = ""; password = ""; connectingID = id
         defer { connectingID = nil }
-        if let result = await perform(.connect(id: id, password: secret, remember: remember), inModal: true), result.failure == nil {
+        if let result = await perform(.connect(id: id, username: submittedUsername, password: secret, remember: remember), inModal: true), result.failure == nil {
             closeModal()
         }
     }

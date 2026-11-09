@@ -1,6 +1,14 @@
 import Foundation
 
 enum VPNPolicy {
+    static func username(_ value: String, required: Bool = false) throws -> String {
+        guard value.utf8.count <= 256, !value.contains(where: { "\n\r\0".contains($0) }),
+              !required || !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw AppError("invalid_username", required ? "Enter a username." : "Invalid username.")
+        }
+        return value
+    }
+
     static func route(_ address: IPv4, _ prefix: UInt8) throws -> Route {
         guard prefix <= 32 else { throw AppError("invalid_route", "IPv4 prefix must be between 0 and 32.") }
         let mask: UInt32 = prefix == 0 ? 0 : UInt32.max << (32 - prefix)
@@ -44,9 +52,7 @@ enum VPNPolicy {
               !update.name.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
             throw AppError("invalid_name", "Use a profile name between 1 and 80 characters.")
         }
-        guard update.username.utf8.count <= 256, !update.username.contains(where: { "\n\r\0".contains($0) }) else {
-            throw AppError("invalid_username", "Invalid username.")
-        }
+        _ = try username(update.username)
         guard update.routes.count <= 256, update.dns.servers.count <= 8, update.dns.domains.count <= 32 else {
             throw AppError("limit", "Too many routes or DNS entries.")
         }

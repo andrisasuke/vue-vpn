@@ -3,7 +3,7 @@ import Foundation
 enum BackendCommand: Sendable {
     case refresh(credentials: Bool)
     case importProfile(URL)
-    case connect(id: String, password: String?, remember: Bool)
+    case connect(id: String, username: String?, password: String?, remember: Bool)
     case disconnect(String), disconnectAll
     case update(id: String, ProfileUpdate)
     case forget(String), delete(String)
@@ -42,7 +42,8 @@ actor BackendWorker: BackendExecuting {
                 if credentials { backend.refreshCredentials() }
                 try backend.refresh()
             case .importProfile(let url): importedID = try backend.importProfile(url)
-            case .connect(let id, let password, let remember): try backend.connect(id, password: password, remember: remember)
+            case .connect(let id, let username, let password, let remember):
+                try backend.connect(id, username: username, password: password, remember: remember)
             case .disconnect(let id): try backend.disconnect(id)
             case .disconnectAll: try backend.disconnectAll()
             case .update(let id, let update): try backend.update(id, update)

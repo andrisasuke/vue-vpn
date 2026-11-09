@@ -37,6 +37,9 @@ final class ApplicationController:NSObject,NSApplicationDelegate,NSWindowDelegat
         var modal:WorkspaceModal?
         var profile:Profile?
         var busy:Bool
+        var username:String
+        var needsUsername:Bool
+        var needsPassword:Bool
         var hasPassword:Bool
         var passwordVisible:Bool
         var remember:Bool
@@ -142,6 +145,7 @@ final class ApplicationController:NSObject,NSApplicationDelegate,NSWindowDelegat
     private func updateDialog() {
         guard let workspace,let root else { return }
         let next = DialogState(modal:model.modal,profile:model.modalProfile,busy:model.busy,
+            username:model.username,needsUsername:model.credentialsNeedUsername,needsPassword:model.credentialsNeedPassword,
             hasPassword:!model.password.isEmpty,passwordVisible:model.passwordVisible,remember:model.rememberPassword,
             error:model.modalError,active:model.state.sessions.contains { $0.profileId == model.modalProfile?.id && $0.active })
         workspace.setCoveredByModal(model.modal != nil)

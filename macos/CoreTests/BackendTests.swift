@@ -2,12 +2,12 @@ import Foundation
 import XCTest
 
 final class BackendTests: XCTestCase {
-    private func setup() throws -> (VPNBackend, FakeBridge, FakeClock, String) {
+    private func setup(username: String = "demo") throws -> (VPNBackend, FakeBridge, FakeClock, String) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("vuevpn-backend-" + UUID().uuidString)
         let store = try ProfileStore(root: root)
         addTeardownBlock { try? FileManager.default.removeItem(at: root) }
         let imported = try ProfileParser.parse("client\ndev tun\nremote vpn.example.test\nauth-user-pass\n", fallbackName: "Development")
-        var profile = imported.profile; profile.username = "demo"
+        var profile = imported.profile; profile.username = username
         try store.save(profile, content: imported.content)
         let fake = FakeBridge(), clock = FakeClock(); fake.allowVPNOperations = true
         return (try VPNBackend(store: store, bridge: fake, clock: clock), fake, clock, profile.id)
@@ -51,6 +51,31 @@ final class BackendTests: XCTestCase {
         try b.connect(id, password: "test-pin", remember: true)
         f.sessions[0].status = .connected; try b.refresh()
         XCTAssertTrue(f.saved.isEmpty); XCTAssertFalse(try b.get(id).allowPasswordSave)
+    }
+
+    func testFirstUsernamePasswordConnectPersistsUsernameBeforeAuthentication() throws {
+        let (b, f, _, id) = try setup(username: "")
+        try b.connect(id, username: "demo-user", password: "unit-test-secret")
+        XCTAssertEqual(try b.get(id).username, "demo-user")
+        XCTAssertEqual(try ProfileStore(root: b.store.root).profiles().first?.username, "demo-user")
+        XCTAssertEqual(f.connections.last?.username, "demo-user")
+        XCTAssertEqual(f.connections.last?.password, "unit-test-secret")
+    }
+
+    func testMissingUsernameCannotUseRememberedPasswordAndInvalidDraftDoesNotPersist() throws {
+        let (b, f, _, id) = try setup(username: ""); f.saved[id] = "saved-secret"
+        XCTAssertThrowsError(try b.connect(id)) { XCTAssertEqual(($0 as? AppError)?.code, "username_required") }
+        XCTAssertTrue(f.connections.isEmpty)
+        XCTAssertThrowsError(try b.connect(id, username: " \n", password: "new-secret")) { XCTAssertEqual(($0 as? AppError)?.code, "invalid_username") }
+        XCTAssertEqual(try b.get(id).username, "")
+        XCTAssertEqual(try ProfileStore(root: b.store.root).profiles().first?.username, "")
+    }
+
+    func testConfigurationLockedUsernameOverridesSubmittedUsername() throws {
+        let (b, f, _, id) = try setup(username: ""); f.validatedUsername = "locked-user"
+        try b.connect(id, username: "draft-user", password: "unit-test-secret")
+        XCTAssertEqual(try b.get(id).username, "locked-user")
+        XCTAssertEqual(f.connections.last?.username, "locked-user")
     }
 
     func testFullTunnelConflictIsRejectedBeforeSecondConnect() throws {

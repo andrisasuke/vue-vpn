@@ -141,6 +141,20 @@ import AppKit
         credentials.frame = dialog.frame;credentials.update();credentials.applyTheme(.dark)
         XCTAssertEqual(model.password,"synthetic-pin");XCTAssertTrue(model.rememberPassword)
         XCTAssertNil(credentials.window)
+
+        var usernameSnapshot = snapshot
+        usernameSnapshot.profiles[0].authKind = .usernamePassword; usernameSnapshot.profiles[0].username = ""
+        let usernameModel = WorkspaceModel(backend:NoBackend());usernameModel.accept(usernameSnapshot)
+        usernameModel.openModal(.credentials(profile.id));usernameModel.username = "draft-user";usernameModel.password = "draft-password"
+        let usernameDialog = ProfileDialog(model:usernameModel,modal:.credentials(profile.id),profile:usernameSnapshot.profiles[0])
+        usernameDialog.frame = dialog.frame;usernameDialog.update()
+        let usernameInputs = inputs(usernameDialog)
+        let username = try XCTUnwrap(usernameInputs.first { $0.field.accessibilityLabel() == "Username" })
+        let password = try XCTUnwrap(usernameInputs.first { $0.field.accessibilityLabel() == "Password" })
+        let usernameIdentity = username.field,passwordIdentity = password.field
+        usernameDialog.applyTheme(.dark);usernameDialog.applyTheme(.light)
+        XCTAssertTrue(username.field === usernameIdentity); XCTAssertTrue(password.field === passwordIdentity)
+        XCTAssertEqual(username.field.stringValue,"draft-user"); XCTAssertEqual(password.field.stringValue,"draft-password")
     }
 
     func testRenderPagesAndDialogsInBothThemesWithoutWindows() throws {

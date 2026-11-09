@@ -40,8 +40,8 @@ final class WorkspaceTests: XCTestCase {
         XCTAssertFalse(model.rememberPassword)
         model.password = "synthetic-pin"; model.rememberPassword = true
         await model.submitCredentials()
-        guard case .connect(let id, let password, let remember) = fake.commands.last else { return XCTFail("Missing connection") }
-        XCTAssertEqual(id, state.profiles[0].id); XCTAssertEqual(password, "synthetic-pin"); XCTAssertTrue(remember)
+        guard case .connect(let id, let username, let password, let remember) = fake.commands.last else { return XCTFail("Missing connection") }
+        XCTAssertEqual(id, state.profiles[0].id); XCTAssertNil(username); XCTAssertEqual(password, "synthetic-pin"); XCTAssertTrue(remember)
         XCTAssertEqual(model.password, ""); XCTAssertNil(model.modal)
         XCTAssertEqual(model.connectedCount, 0)
         model.stopPolling()
@@ -53,8 +53,8 @@ final class WorkspaceTests: XCTestCase {
             state.profiles[0].authKind = kind; state.profiles[0].remembered = kind == .pin
             model.accept(state); fake.reply.snapshot = state
             await model.toggle()
-            guard case .connect(_, let password, let remember) = fake.commands.last else { return XCTFail("Missing connection") }
-            XCTAssertNil(password); XCTAssertFalse(remember); XCTAssertNil(model.modal)
+            guard case .connect(_, let username, let password, let remember) = fake.commands.last else { return XCTFail("Missing connection") }
+            XCTAssertNil(username); XCTAssertNil(password); XCTAssertFalse(remember); XCTAssertNil(model.modal)
         }
     }
 
@@ -169,8 +169,32 @@ final class WorkspaceTests: XCTestCase {
         let (model, fake, initial) = try setup(); var state = initial; state.profiles[0].allowPasswordSave = false
         model.accept(state); await model.toggle(); model.password = "synthetic"; model.rememberPassword = true
         await model.submitCredentials()
-        guard case .connect(_, _, let remember) = fake.commands.last else { return XCTFail("Missing connect") }
+        guard case .connect(_, _, _, let remember) = fake.commands.last else { return XCTFail("Missing connect") }
         XCTAssertFalse(remember)
+    }
+
+    func testUsernamePasswordFirstConnectSubmitsAndThenPromptsOnlyForPassword() async throws {
+        let (model, fake, initial) = try setup(); var state = initial
+        state.profiles[0].authKind = .usernamePassword; state.profiles[0].username = ""
+        model.accept(state); fake.reply.snapshot = state
+        await model.toggle()
+        XCTAssertEqual(model.modal, .credentials(state.profiles[0].id))
+        XCTAssertTrue(model.credentialsNeedUsername); XCTAssertTrue(model.credentialsNeedPassword)
+        model.username = "demo-user"; model.password = "synthetic-password"
+        await model.submitCredentials()
+        guard case .connect(let id, let username, let password, _) = fake.commands.last else { return XCTFail("Missing connection") }
+        XCTAssertEqual(id, state.profiles[0].id); XCTAssertEqual(username, "demo-user"); XCTAssertEqual(password, "synthetic-password")
+        state.profiles[0].username = "demo-user"; model.accept(state); model.openModal(.credentials(state.profiles[0].id))
+        XCTAssertFalse(model.credentialsNeedUsername); XCTAssertTrue(model.credentialsNeedPassword)
+    }
+
+    func testRememberedPasswordStillPromptsForMissingUsernameAndCancelDropsDraft() async throws {
+        let (model, fake, initial) = try setup(); var state = initial
+        state.profiles[0].authKind = .usernamePassword; state.profiles[0].username = ""; state.profiles[0].remembered = true
+        model.accept(state); await model.toggle()
+        XCTAssertTrue(model.credentialsNeedUsername); XCTAssertFalse(model.credentialsNeedPassword)
+        model.username = "draft-user"; model.closeModal()
+        XCTAssertEqual(model.username, ""); XCTAssertTrue(fake.commands.isEmpty)
     }
 
     func testQuitKeepsApplicationAliveWhenCleanupFails() async throws {
