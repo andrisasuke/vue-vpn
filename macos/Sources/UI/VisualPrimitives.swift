@@ -97,6 +97,17 @@ enum VPNDrawing {
         return CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
     }
 
+    /// Baseline that centers the visible glyphs, rather than the font's advance box.
+    static func centeredTextBaseline(_ string:String, center:CGPoint, size:CGFloat, weight:CGFloat) -> CGPoint {
+        let bounds = textBounds(string,size:size,weight:weight)
+        return CGPoint(x:center.x-bounds.midX,y:center.y+bounds.midY)
+    }
+
+    static func textBounds(_ string:String, size:CGFloat, weight:CGFloat) -> CGRect {
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string:string,attributes:[.font:systemFont(size:size,weight:weight)]))
+        return CTLineGetBoundsWithOptions(line,[.useGlyphPathBounds])
+    }
+
     static func truncatedText(_ string: String, width: CGFloat, in context: CGContext, at baseline: CGPoint,
                               size: CGFloat, weight: CGFloat, color: UInt32) {
         context.saveGState(); defer { context.restoreGState() }

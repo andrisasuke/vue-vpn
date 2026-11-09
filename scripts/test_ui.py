@@ -22,6 +22,7 @@ PHASES = {
     "theme": (["ThemeTests/"], []),
     "energy": (["EnergyTests/"], []),
     "performance": (["PerformanceTests/"], []),
+    "stats": (["StatsPresentationTests/"], []),
 }
 
 def main():
@@ -37,7 +38,7 @@ def main():
     phases = list(PHASES) if args.phase == "all" else [args.phase]
     methods = [method for phase in phases for method in PHASES[phase][0]]
     reports = [name for phase in phases for name in PHASES[phase][1]]
-    expected_count = sum(12 if phase == "behavior" else 7 if phase == "theme" else 8 if phase == "energy" else len(PHASES[phase][0]) for phase in phases)
+    expected_count = sum(12 if phase == "behavior" else 7 if phase == "theme" else 8 if phase == "energy" else 15 if phase == "stats" else 2 if phase == "performance" else len(PHASES[phase][0]) for phase in phases)
     OUTPUT.mkdir(parents=True, exist_ok=True)
     suffix = args.phase + ("-release" if args.configuration == "Release" else "")
     bundle = OUTPUT / f"ui-{suffix}.xcresult"

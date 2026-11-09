@@ -1,7 +1,9 @@
 import Foundation
 import Observation
 
-enum WorkspaceScreen: String, Sendable { case overview, activity, setup }
+enum WorkspaceScreen: String, Sendable { case overview, activity, setup, cpu, ram, ssd, network
+    var statsPage: StatsPage? { StatsPage(rawValue:rawValue) }
+}
 enum WorkspaceModal: Equatable { case credentials(String), settings(String), delete(String) }
 
 @MainActor @Observable

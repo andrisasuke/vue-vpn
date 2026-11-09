@@ -7,10 +7,16 @@ struct WorkspacePresentation: Equatable {
     var busy = false
     var themePreference: ThemePreference = .system
     var palette: ThemePalette = .light
+    /// Frozen visual fixtures represent the pre-Stats sidebar. The application
+    /// explicitly enables Stats navigation; new tests cover that layout.
+    var statsNavigation = false
+    var statsMenuVisible = Set(StatsPage.allCases)
+    var statsMenuStyles:[StatsPage:StatsMenuStyle] = [:]
     var selected: Profile? { snapshot.profiles.first { $0.id == selectedID } }
     var connectedCount: Int { snapshot.sessions.filter { $0.status == .connected }.count }
     var title: String {
-        switch screen { case .overview: "Overview"; case .activity: "Activity"; case .setup: "App settings" }
+        switch screen { case .overview: "Overview"; case .activity: "Activity"; case .setup: "App settings"
+        case .cpu: "CPU"; case .ram: "RAM"; case .ssd: "SSD"; case .network: "Network" }
     }
 }
 
@@ -18,12 +24,14 @@ enum WorkspaceAction: Equatable {
     case screen(WorkspaceScreen), profile(String), importProfile, toggle, edit, delete, dismissError
     case disconnectAll, helper(String)
     case theme(ThemePreference)
+    case selectStatsInterface, editProbeTarget, refreshPublicAddress
+    case toggleStatsMenu(StatsPage), toggleStatsMonitoring(StatsPage), statsMenuStyle(StatsPage,StatsMenuStyle)
     case closeModal, submitCredentials, togglePassword, toggleRemember, saveProfile, forgetPassword
     case addRoute, removeRoute(Route), editorRouting(RoutingMode), toggleLegacyCipher, confirmDelete
 }
 
 struct WorkspaceHitRegion {
-    enum Role { case button,radio,checkbox }
+    enum Role:Equatable { case button,radio,checkbox }
     var rect: CGRect
     var title: String
     var action: WorkspaceAction
@@ -67,15 +75,32 @@ struct WorkspaceHitRegion {
             }
             hits.append(WorkspaceHitRegion(rect: rect, title: row.1, action: .screen(row.0)))
         }
-        VPNDrawing.text("YOUR PROFILES", in: context, at: CGPoint(x: 22, y: 314.5), size: 9, weight: 400, tracking: 1.3, color: palette[.secondaryText, light:0x97ab9b])
-        let importRect = CGRect(x:148,y:299,width:24,height:24)
+        if state.statsNavigation {
+            VPNDrawing.text("STATS", in: context, at: CGPoint(x: 22, y: 310), size: 9, weight: 500, tracking: 1.3, color: palette[.secondaryText, light:0x97ab9b])
+            for (i,row) in [(WorkspaceScreen.cpu,"CPU",VPNIcon.chip),(.ram,"RAM",VPNIcon.memory),(.ssd,"SSD",VPNIcon.ssd),(.network,"Network",VPNIcon.network)].enumerated() {
+                let rect = CGRect(x:11,y:320+CGFloat(i)*42,width:172,height:39)
+                let selected = state.screen == row.0
+                let hovered = feedback(.screen(row.0),rect).hovered
+                if hovered && !selected {
+                    context.setFillColor(VPNDrawing.color(palette[.overlay,light:0xffffff],alpha:8.0/255))
+                    context.addPath(CGPath(roundedRect:rect,cornerWidth:9,cornerHeight:9,transform:nil));context.fillPath()
+                }
+                if selected { VPNDrawing.rounded(rect,radius:9,fill:palette[.sidebarSelected,light:0x34483a],in:context) }
+                row.2.draw(in:CGRect(x:25,y:rect.minY+10,width:18,height:18),color:selected ? palette[.accent,light:0xd8efad] : hovered ? palette[.onAccent,light:0xffffff] : palette[.secondaryText,light:0xb9c8bc],context:context)
+                VPNDrawing.text(row.1,in:context,at:CGPoint(x:56,y:rect.minY+25),size:12,weight:selected ? 600 : 400,color:selected ? palette[.accent,light:0xeaf7d3] : hovered ? palette[.onAccent,light:0xffffff] : palette[.secondaryText,light:0xb9c8bc])
+                hits.append(.init(rect:rect,title:"Stats \(row.1)",action:.screen(row.0)))
+            }
+        }
+        let profileHeading: CGFloat = state.statsNavigation ? 504 : 314.5
+        VPNDrawing.text("YOUR PROFILES", in: context, at: CGPoint(x: 22, y: profileHeading), size: 9, weight: 400, tracking: 1.3, color: palette[.secondaryText, light:0x97ab9b])
+        let importRect = CGRect(x:148,y:state.statsNavigation ? 489 : 299,width:24,height:24)
         if !state.busy && feedback(.importProfile,importRect).hovered {
             context.setFillColor(VPNDrawing.color(palette[.overlay, light:0xffffff],alpha:16.0/255))
             context.addPath(CGPath(roundedRect:importRect,cornerWidth:5,cornerHeight:5,transform:nil));context.fillPath()
         }
-        VPNIcon.plus.draw(in: CGRect(x: 154, y: 303.5, width: 14, height: 14), color: palette[.secondaryText, light:0xa4b5a3], context: context)
-        hits.append(WorkspaceHitRegion(rect: CGRect(x: 148, y: 299, width: 24, height: 24), title: "Import profile", action: .importProfile, enabled: !state.busy))
-        var y: CGFloat = 335
+        VPNIcon.plus.draw(in: CGRect(x: 154, y:state.statsNavigation ? 493.5 : 303.5, width: 14, height: 14), color: palette[.secondaryText, light:0xa4b5a3], context: context)
+        hits.append(WorkspaceHitRegion(rect: importRect, title: "Import profile", action: .importProfile, enabled: !state.busy))
+        var y: CGFloat = state.statsNavigation ? 524 : 335
         if state.snapshot.profiles.isEmpty {
             let lines = VPNDrawing.wrappedLines("Your imported networks will appear here.",width:148,size:11,weight:400)
             for (i,line) in lines.enumerated() {
@@ -89,7 +114,7 @@ struct WorkspaceHitRegion {
             let label = session?.disconnectStalled == true ? "Disconnect stalled" : status.label
             let rect = CGRect(x: 11, y: y, width: 172, height: 62)
             if feedback(.profile(profile.id),rect).hovered { VPNDrawing.rounded(rect,radius:9,fill:palette[.sidebarHover, light:0x2a4033],in:context) }
-            if state.selectedID == profile.id { VPNDrawing.rounded(rect, radius: 9, fill: palette[.sidebarSelected, light:0x354c3b], in: context) }
+            if state.selectedID == profile.id && state.screen.statsPage == nil { VPNDrawing.rounded(rect, radius: 9, fill: palette[.sidebarSelected, light:0x354c3b], in: context) }
             context.setFillColor(VPNDrawing.color(palette[.overlay, light:0xffffff], alpha: 11.0/255))
             context.addPath(CGPath(roundedRect: CGRect(x: 25, y: y+15, width: 32, height: 32), cornerWidth: 9, cornerHeight: 9, transform: nil)); context.fillPath()
             VPNIcon.server.draw(in: CGRect(x: 33, y: y+23, width: 16, height: 16), color: status == .connected ? palette[.accent, light:0xcfed9f] : palette[.secondaryText, light:0xc1d59b], context: context)
@@ -135,8 +160,9 @@ struct WorkspaceHitRegion {
         let palette = state.palette
         fill(CGRect(x:0,y:0,width:width,height:50),palette[.background, light:0xfafbf8],context)
         fill(CGRect(x:0,y:49,width:width,height:1),palette[.border, light:0xe5e9df],context)
-        VPNDrawing.text("Workspace",in:context,at:CGPoint(x:24,y:32.5),size:11,weight:400,color:palette[.secondaryText, light:0x889184])
-        let nameWidth = ceil(VPNDrawing.textWidth("Workspace",size:11,weight:400)*64)/64
+        let section = state.screen.statsPage == nil ? "Workspace" : "Stats"
+        VPNDrawing.text(section,in:context,at:CGPoint(x:24,y:32.5),size:11,weight:400,color:palette[.secondaryText, light:0x889184])
+        let nameWidth = ceil(VPNDrawing.textWidth(section,size:11,weight:400)*64)/64
         VPNIcon.chevron.draw(in:CGRect(x:24+nameWidth+12,y:22,width:13,height:13),color:palette[.secondaryText, light:0xa8b19f],context:context)
         VPNDrawing.text(state.title,in:context,at:CGPoint(x:24+nameWidth+37,y:32.5),size:11,weight:500,color:palette[.text, light:0x495c4b])
         let label = state.connectedCount == 0 ? "No active connection" : "\(state.connectedCount) connected"

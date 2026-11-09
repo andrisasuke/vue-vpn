@@ -44,6 +44,76 @@ connections remain active. Animation also pauses when its illustration scrolls
 out of view. Low Power Mode retains normal animation, while Reduce Motion is
 respected.
 
+## System Stats
+
+The sidebar's **Stats** section opens CPU, RAM, SSD, and Network pages with
+distinct chip, memory-module, drive, and globe icons. Four compact menu-bar
+controls show RAM, SSD, Network download/upload, and CPU readings in one native
+Stats item. The four controls cannot be dragged or reordered separately in
+macOS; the VPN item remains separate.
+In Label style, RAM, SSD, and CPU align each small label with the left edge of its percentage; Network stacks
+direction-labelled download and upload rates with units. Each metric keeps
+its compact width as readings change; exceptionally high rates display as
+`999+GB/s`. Clicking
+one restores the existing VueVPN window on that page. Stats works with no VPN
+connection and with the VPN helper disabled. The original VPN icon and menu
+remain separate. Each Stats page has a **Show in menu bar** checkbox for its
+own metric; all four are shown by default, and choices persist across restarts.
+Each page also has an independent **Menu bar style: Label / Icon** choice, saved across restarts and available while hidden. Label is the default; Icon shows the value beside a green metric icon (Network keeps both rate rows beside a globe). Fixed columns keep icons steady as values change; Icon values align by their visible right edge close to the icon. Menu-bar colors follow the status item appearance independently of the window theme.
+Hiding an item frees its menu-bar space while readings and history continue in
+the app. Each page also has an independent **Enable monitoring** setting,
+on by default and saved across restarts. Turning it off stops that domain's
+Stats collection and related process or network work, hides its tray metric,
+and shows a disabled state on its still-accessible page. It preserves the
+separate visibility and style choices for when monitoring resumes. With all
+four off, the Stats polling timer stops. VPN connections and their own polling
+are independent of these controls. The sidebar scrolls when profiles extend past the window.
+Switching Stats pages or hiding the window keeps the latest aggregate menu-bar
+readings until the next sample; genuinely unavailable readings still show an
+em dash.
+
+Each page starts with a live summary: CPU, RAM, and SSD use a composition ring and bar with their values in the card; Network shows download and upload rates. The five-minute history and distinct details remain below. Unavailable or inconsistent compositions use a neutral track. The charts update immediately without motion; Low Power Mode changes sampling cadence as described below.
+
+CPU shows total/system/user/idle percentages, available per-core and E/P group
+readings, uptime, load averages, a five-minute chart, and accessible processes.
+Live CPU frequency is **Unavailable** on Apple Silicon without a supported
+public API. RAM shows pressure, App/Wired/Compressed/Free memory, swap, history,
+and processes. SSD shows the internal macOS filesystem's actual available space
+and used percentage, read/write rates when its driver exposes counters, history,
+and processes. Reclaimable space is shown only when a reliable estimate exists;
+it is never treated as already free. Disk process I/O is system-wide, not scoped
+to the selected filesystem.
+
+Network follows the active physical Wi-Fi or Ethernet interface. Use the
+**Interface** control to cycle through automatic selection and available physical
+interfaces. Its rates and application-session totals come from the selected
+interface; VPN tunnel bytes are not added. Totals count traffic observed while
+Network monitoring is enabled, are retained per interface when switching or
+temporarily disabling monitoring, and reset when the app restarts. Local addresses and hardware
+address appear when available; Wi-Fi name/SSID is not read. Process network I/O
+is system-wide and cannot be attributed to the selected interface.
+
+Public IPv4/IPv6 uses normal OS routing, so it describes the current routed
+egress, including VPN changes. VueVPN requests plain address text over HTTPS
+from `api4.ipify.org` and `api6.ipify.org` at monitoring start, physical-link or
+VPN-context changes, and when **Refresh public IP** is clicked. It does not poll
+these providers periodically or send profile data. The page labels pending,
+stale, unavailable, and failed lookups and shows the last successful update.
+Connectivity checks a configurable target, initially `1.1.1.1`, using TCP port
+443 every five seconds only while Network is visible. Three failures mean that
+target is unreachable; they do not establish that every internet destination is
+down. Hidden periods are marked unmonitored.
+
+Lightweight aggregate readings share one schedule: about one second normally,
+two seconds in Low Power Mode. Visible-page process lists update about every
+three or five seconds respectively. SSD capacity updates every 30 seconds.
+Sleep/display sleep pauses collection; wake resets rate baselines. Resuming a
+disabled domain also starts with fresh rate baselines and marks a gap in its
+bounded history. All chart history lasts at most five minutes in memory and is cleared on quit. Low Power
+Mode changes only Stats sampling; VPN animation keeps its existing behavior.
+Some hardware or protected-process readings may show **Unavailable**. Actual
+energy use and hardware accuracy must be checked manually on the target Mac.
+
 ## Updating the app
 
 Quit the old VueVPN app, replace `/Applications/VueVPN.app` with the new

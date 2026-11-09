@@ -5,6 +5,50 @@ import Darwin
 /// CPU-time comparison of the old full-scene drawing workload and retained
 /// artwork, including software compositing of every frame. No live app/window.
 @MainActor final class PerformanceTests:XCTestCase {
+    func testStatsAggregateSnapshotAndMenuCPUTimeIsReportedSeparatelyFromDetail() throws {
+        let samples = 300
+        var stats = SystemStatsSnapshot()
+        let start = Double(clock())/Double(CLOCKS_PER_SEC)
+        for second in 0..<samples {
+            stats.cpu.total = Double(second%100)/100
+            stats.ram.total = 16_000_000_000
+            stats.ram.app = UInt64(second%8)*1_000_000_000
+            stats.ram.wired = 2_000_000_000
+            stats.ram.compressed = 1_000_000_000
+            stats.disk.total = 500_000_000_000
+            stats.disk.available = 200_000_000_000
+            stats.networkDownRate = Double(second)*1000
+            stats.networkUpRate = Double(second)*500
+            stats.cpuHistory.add(.init(time:Double(second),value:stats.cpu.total))
+            _ = StatsMenuPresentation.metrics(stats)
+        }
+        let aggregateCPU = Double(clock())/Double(CLOCKS_PER_SEC)-start
+        let state = WorkspacePresentation(snapshot:Snapshot(profiles:[],sessions:[],helper:HelperStatus("disabled","Disabled"),logs:[]),
+            selectedID:"",screen:.cpu,palette:.light,statsNavigation:true)
+        stats.processes[.cpu] = (0..<5).map { .init(pid:Int32($0),name:"Synthetic process \($0)",amount:Double($0),outbound:nil,scope:"% of one core") }
+        let detailStart = Double(clock())/Double(CLOCKS_PER_SEC)
+        let context = try XCTUnwrap(CGContext(data:nil,width:766,height:1000,bitsPerComponent:8,bytesPerRow:766*4,
+            space:CGColorSpace(name:CGColorSpace.sRGB)!,bitmapInfo:CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.translateBy(x:0,y:1000);context.scaleBy(x:1,y:-1)
+        for _ in 0..<30 {
+            let scene = WorkspaceContent.make(state,width:766,clock:0,connection:.init(),stats:stats)
+            scene.draw(in:context)
+        }
+        let detailCPU = Double(clock())/Double(CLOCKS_PER_SEC)-detailStart
+        let report:[String:Any] = ["aggregateSamples":samples,"aggregateSnapshotAndMenuCPUSeconds":aggregateCPU,
+            "visibleDetailFrames":30,"visibleDetailCPUSeconds":detailCPU,
+            "historyPoints":stats.cpuHistory.points.count,"historyLimit":301,"imageCacheBytes":DrawingResources.images.totalCost,
+            "imageCacheLimitBytes":DrawingResources.images.limit,"interfaceStateLimit":16,"processBaselineLimit":4096,
+            "scope":"Hostless synthetic snapshot/history and menu formatting versus visible CPU page with processes. No native reads, subprocesses, live app, WindowServer, battery or Energy Impact measurement."]
+        let output = URL(fileURLWithPath:#filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("artifacts/migration/energy")
+        try FileManager.default.createDirectory(at:output,withIntermediateDirectories:true)
+        try JSONSerialization.data(withJSONObject:report,options:[.prettyPrinted,.sortedKeys]).write(to:output.appendingPathComponent("stats-benchmark.json"))
+        XCTAssertEqual(stats.cpuHistory.points.count,300)
+        XCTAssertGreaterThanOrEqual(aggregateCPU,0)
+        XCTAssertGreaterThanOrEqual(detailCPU,0)
+    }
+
     func testRetainedRenderingReducesCPUWorkByAtLeastEightyPercent() throws {
         struct Fixture:Decodable { let snapshot:Snapshot }
         let root = URL(fileURLWithPath:#filePath).deletingLastPathComponent()

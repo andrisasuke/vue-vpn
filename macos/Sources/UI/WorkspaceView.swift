@@ -74,6 +74,8 @@ final class SceneCanvasView: NSView {
     var background:UInt32 = 0xfafbf8
     private var regions:[WorkspaceHitRegion] = []
     private var buttons:[SceneActionButton] = []
+    private var statsLayers:[StatsChartLayers] = []
+    private var summaryLayers:[StatsSummaryLayers] = []
     var cursorSuppressed = false { didSet { buttons.forEach { $0.cursorSuppressed = cursorSuppressed } } }
     private(set) var connectionView:ConnectionPanelView?
     var perform:((WorkspaceAction) -> Void)?
@@ -104,6 +106,22 @@ final class SceneCanvasView: NSView {
         }
         connectionView?.frame = rect
         connectionView?.update(state,palette:palette,epoch:epoch)
+    }
+
+    func setStatsCharts(_ charts:[StatsChartSurface],palette:ThemePalette) {
+        while statsLayers.count > charts.count { statsLayers.removeLast().root.removeFromSuperlayer() }
+        while statsLayers.count < charts.count {
+            let chart = StatsChartLayers();statsLayers.append(chart);layer?.addSublayer(chart.root)
+        }
+        for (layers,chart) in zip(statsLayers,charts) { layers.update(chart,palette:palette) }
+    }
+
+    func setStatsSummaries(_ summaries:[StatsSummarySurface],palette:ThemePalette) {
+        while summaryLayers.count > summaries.count { summaryLayers.removeLast().root.removeFromSuperlayer() }
+        while summaryLayers.count < summaries.count {
+            let summary = StatsSummaryLayers();summaryLayers.append(summary);layer?.addSublayer(summary.root)
+        }
+        for (layers,summary) in zip(summaryLayers,summaries) { layers.update(summary,palette:palette) }
     }
 
     func setRegions(_ next:[WorkspaceHitRegion]) {
@@ -142,6 +160,8 @@ final class WorkspaceView: NSView {
     private let footer = SceneCanvasView()
     private let toast = ToastView(frame:.zero)
     private var toastText = ""
+    private var stats = SystemStatsSnapshot()
+    private var statsContentDirty = false
     private var state: WorkspacePresentation?
     private var connection = ConnectionPresentation()
     private var clock:UInt64 = 0
@@ -160,7 +180,11 @@ final class WorkspaceView: NSView {
     private var accessibilityObserver:NSObjectProtocol?
     private(set) var palette:ThemePalette = .light
     private var themePreference:ThemePreference = .system
+    private var statsMenuVisible = Set(StatsPage.allCases)
+    private var statsMenuStyles:[StatsPage:StatsMenuStyle] = [:]
     var perform:((WorkspaceAction) -> Void)?
+    var visibilityChanged: ((StatsPage?) -> Void)?
+    var sleepChanged: ((Bool) -> Void)?
     override var isFlipped:Bool { true }
 
     init(frame:NSRect,environment:(() -> RenderingEnvironment)? = nil) {
@@ -176,6 +200,7 @@ final class WorkspaceView: NSView {
             addSubview(scroll)
         }
         addSubview(header);addSubview(footer);addSubview(toast)
+        content.wantsLayer = true
         for surface in [sidebar,content,footer] { surface.perform = { [weak self] in self?.perform?($0) } }
         setAccessibilityRole(.group);setAccessibilityLabel("VueVPN workspace")
         accessibilityObserver = NSWorkspace.shared.notificationCenter.addObserver(
@@ -206,6 +231,24 @@ final class WorkspaceView: NSView {
         structuralDirty = true;refreshAnimation()
     }
 
+    func setStatsMenuStyles(_ styles:[StatsPage:StatsMenuStyle]) {
+        guard statsMenuStyles != styles else { return }
+        statsMenuStyles = styles; state?.statsMenuStyles = styles
+        if state?.screen.statsPage != nil {
+            if environment.rendersWorkspace { rebuildContent() } else { structuralDirty = true }
+        }
+    }
+
+    func setStatsMenuVisibility(_ pages:Set<StatsPage>) {
+        guard statsMenuVisible != pages else { return }
+        statsMenuVisible = pages
+        state?.statsMenuVisible = pages
+        if state?.screen.statsPage != nil {
+            if environment.rendersWorkspace { rebuildContent() }
+            else { structuralDirty = true }
+        }
+    }
+
     func setCoveredByModal(_ covered:Bool) {
         guard coveredByModal != covered else { return }
         coveredByModal = covered
@@ -217,6 +260,9 @@ final class WorkspaceView: NSView {
         let oldStructure = state?.structure,oldError = error,oldLoaded = loaded
         let oldConnection = connection
         state = WorkspacePresentation(snapshot:model.state,selectedID:model.selectedID,screen:model.screen,busy:model.busy || model.quitting,themePreference:themePreference,palette:palette)
+        state?.statsNavigation = true
+        state?.statsMenuVisible = statsMenuVisible
+        state?.statsMenuStyles = statsMenuStyles
         var status = model.session?.status ?? .disconnected
         if model.isConnecting { status = .connecting }
         if model.isDisconnecting { status = .disconnecting }
@@ -232,6 +278,25 @@ final class WorkspaceView: NSView {
             previousProfileID = model.selectedID;previousScreen = model.screen
         }
         refreshAnimation()
+    }
+
+    func updateStats(_ value: SystemStatsSnapshot) {
+        guard value != stats else { return }
+        let old = stats
+        stats = value
+        guard let page = state?.screen.statsPage else { return }
+        guard environment.rendersWorkspace else { statsContentDirty = true; return }
+        if !old.enabledPages.contains(page), !value.enabledPages.contains(page) { return }
+        let statusChanged = old.enabledPages.contains(page) != value.enabledPages.contains(page) || old.collectingPages.contains(page) != value.collectingPages.contains(page)
+        let relevant: Bool
+        switch page {
+        case .cpu: relevant = old.cpu != value.cpu || old.cpuHistory != value.cpuHistory
+        case .ram: relevant = old.ram != value.ram || old.ramHistory != value.ramHistory
+        case .ssd: relevant = old.disk != value.disk || old.diskReadRate != value.diskReadRate || old.diskWriteRate != value.diskWriteRate || old.diskHistory != value.diskHistory
+        case .network: relevant = old.interfaces != value.interfaces || old.selectedInterface != value.selectedInterface || old.automaticInterface != value.automaticInterface || old.networkDownRate != value.networkDownRate || old.networkUpRate != value.networkUpRate || old.networkDownTotal != value.networkDownTotal || old.networkUpTotal != value.networkUpTotal || old.networkHistory != value.networkHistory || old.publicIPv4 != value.publicIPv4 || old.publicIPv6 != value.publicIPv6 || old.connectivity != value.connectivity
+        }
+        guard statusChanged || relevant || old.processes[page] != value.processes[page] else { return }
+        rebuildContent()
     }
 
     private var lastLayoutSize = CGSize.zero
@@ -254,7 +319,7 @@ final class WorkspaceView: NSView {
         let palette = self.palette
         let mainWidth = max(1,bounds.width-194)
         rebuildContent()
-        let sidebarHeight = max(bounds.height,CGFloat(399+72*state.snapshot.profiles.count))
+        let sidebarHeight = max(bounds.height,CGFloat(660+72*state.snapshot.profiles.count))
         sidebar.frame.size = CGSize(width:194,height:sidebarHeight)
         // Geometry is independent of drawing; a tiny unshown context only records
         // the renderer's hit targets and is never an NSWindow or application view.
@@ -269,14 +334,26 @@ final class WorkspaceView: NSView {
         footer.render = { _ = WorkspaceChrome.footer(width:mainWidth,context:$0,palette:palette) };footer.setRegions([footerHit])
     }
 
+    private(set) var contentBuilds = 0
     private func rebuildContent() {
         guard let state else { return }
+        contentBuilds += 1;statsContentDirty = false
         let width = max(1,bounds.width-194)
         connection.phase = CACurrentMediaTime()-animationOrigin
         connection.reduceMotion = environment.reduceMotion
-        let scene = WorkspaceContent.make(state,width:width,clock:clock,connection:connection,error:error,loaded:loaded,retainedConnection:true)
+        let scene = WorkspaceContent.make(state,width:width,clock:clock,connection:connection,error:error,loaded:loaded,retainedConnection:true,stats:stats,retainedStats:true)
+        if let page = state.screen.statsPage {
+            content.setAccessibilityRole(.group)
+            content.setAccessibilityLabel("\(page.title) system statistics")
+            content.setAccessibilityValue(StatsPanel.accessibilitySummary(page,stats))
+        } else {
+            content.setAccessibilityLabel("VueVPN workspace content")
+            content.setAccessibilityValue(nil)
+        }
         content.frame.size = CGSize(width:width,height:max(scene.height,contentScroll.contentSize.height))
         content.scene = scene
+        content.setStatsCharts(scene.statsCharts,palette:palette)
+        content.setStatsSummaries(scene.statsSummaries,palette:palette)
         content.setConnection(scene.connectionPanel,state:connection,palette:palette,epoch:animationOrigin)
         content.setRegions(scene.hits)
     }
@@ -284,7 +361,7 @@ final class WorkspaceView: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         removeLifecycleObservers()
-        guard window != nil else { stopAnimation();return }
+        guard window != nil else { stopAnimation();visibilityChanged?(nil);return }
         let center = NotificationCenter.default
         for name in [NSWindow.didChangeOcclusionStateNotification,NSWindow.didMiniaturizeNotification,NSWindow.didDeminiaturizeNotification,NSWindow.didChangeBackingPropertiesNotification] {
             observers.append(center.addObserver(forName:name,object:window,queue:.main) { [weak self] _ in
@@ -302,16 +379,18 @@ final class WorkspaceView: NSView {
         for name in [NSWorkspace.screensDidSleepNotification,NSWorkspace.screensDidWakeNotification,NSWorkspace.willSleepNotification,NSWorkspace.didWakeNotification] {
             observers.append(workspaceCenter.addObserver(forName:name,object:nil,queue:.main) { [weak self] notification in
                 let asleep = notification.name == NSWorkspace.screensDidSleepNotification || notification.name == NSWorkspace.willSleepNotification
-                Task { @MainActor in self?.displayAsleep = asleep;self?.refreshAnimation() }
+                Task { @MainActor in self?.displayAsleep = asleep;self?.sleepChanged?(asleep);self?.refreshAnimation() }
             })
         }
         refreshAnimation()
     }
     func refreshAnimation() {
+        visibilityChanged?(environment.rendersWorkspace ? state?.screen.statsPage : nil)
         guard environment.rendersWorkspace else { stopAnimation();return }
         if pendingScrollReset { pendingScrollReset = false;contentScroll.contentView.scroll(to:.zero) }
         if structuralDirty { rebuild() }
         else {
+            if statsContentDirty, state?.screen.statsPage != nil { rebuildContent() }
             connection.reduceMotion = environment.reduceMotion
             content.connectionView?.update(connection,palette:palette,epoch:animationOrigin)
         }

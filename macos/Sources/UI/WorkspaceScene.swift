@@ -9,6 +9,8 @@ import AppKit
     var connectionPanel:CGRect?
     var height: CGFloat = 0
     var hits: [WorkspaceHitRegion] = []
+    var statsCharts: [StatsChartSurface] = []
+    var statsSummaries: [StatsSummarySurface] = []
     private var commands: [@MainActor (CGContext, (WorkspaceAction, CGRect) -> Feedback) -> Void] = []
 
     func draw(in context: CGContext,feedback:(WorkspaceAction,CGRect)->Feedback = { _,_ in Feedback() }) {
@@ -18,7 +20,7 @@ import AppKit
     mutating func interactive(_ action:WorkspaceAction,in rect:CGRect,_ draw:@escaping @MainActor (CGContext,Feedback)->Void) {
         commands.append { context,feedback in draw(context,feedback(action,rect)) }
     }
-    mutating func append(_ scene:WorkspaceScene) { commands += scene.commands;hits += scene.hits }
+    mutating func append(_ scene:WorkspaceScene) { commands += scene.commands;hits += scene.hits;statsCharts += scene.statsCharts;statsSummaries += scene.statsSummaries }
     mutating func text(_ value: String, x: CGFloat, y: CGFloat, size: CGFloat, weight: CGFloat = 400,
                        color: UInt32? = nil, tracking: CGFloat = 0, mono: Bool = false) {
         let color = color ?? palette.text
@@ -79,7 +81,8 @@ import AppKit
 
 @MainActor enum WorkspaceContent {
     static func make(_ state: WorkspacePresentation, width: CGFloat, clock: UInt64,
-                     connection: ConnectionPresentation, error: String = "", loaded: Bool = true,retainedConnection:Bool = false) -> WorkspaceScene {
+                     connection: ConnectionPresentation, error: String = "", loaded: Bool = true,retainedConnection:Bool = false,
+                     stats: SystemStatsSnapshot = .init(),retainedStats:Bool = false) -> WorkspaceScene {
         let palette = state.palette
         var scene = WorkspaceScene(palette:palette)
         let left: CGFloat = 24, inner = max(1,width-48)
@@ -92,11 +95,16 @@ import AppKit
             scene.button("Dismiss error",x:left+inner-39,y:y+6,action:.dismissError,style:.icon,icon:.close)
             y += h+16
         }
-        if !loaded {
+        if !loaded && state.screen.statsPage == nil {
             scene.text("Loading your workspace…",x:left+50,y:y+64,size:14)
             scene.height = y+130; return scene
         }
         switch state.screen {
+        case .cpu,.ram,.ssd,.network:
+            let page = state.screen.statsPage!
+            y = StatsPanel.append(to:&scene,page:page,snapshot:stats,
+                visibleInMenuBar:state.statsMenuVisible.contains(page),style:state.statsMenuStyles[page] ?? .label,
+                x:left,y:y,width:inner,retainedCharts:retainedStats)
         case .overview:
             if state.snapshot.helper.status != "enabled" {
                 let messageHeight = CGFloat(VPNDrawing.wrappedLines(state.snapshot.helper.message,width:max(1,inner-155),size:10,weight:400).count)*15
