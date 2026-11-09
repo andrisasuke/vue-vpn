@@ -97,6 +97,17 @@ enum VPNDrawing {
         return CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
     }
 
+    /// Baseline that centers the visible glyphs, rather than the font's advance box.
+    static func centeredTextBaseline(_ string:String, center:CGPoint, size:CGFloat, weight:CGFloat) -> CGPoint {
+        let bounds = textBounds(string,size:size,weight:weight)
+        return CGPoint(x:center.x-bounds.midX,y:center.y+bounds.midY)
+    }
+
+    static func textBounds(_ string:String, size:CGFloat, weight:CGFloat) -> CGRect {
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string:string,attributes:[.font:systemFont(size:size,weight:weight)]))
+        return CTLineGetBoundsWithOptions(line,[.useGlyphPathBounds])
+    }
+
     static func truncatedText(_ string: String, width: CGFloat, in context: CGContext, at baseline: CGPoint,
                               size: CGFloat, weight: CGFloat, color: UInt32) {
         context.saveGState(); defer { context.restoreGState() }
@@ -228,7 +239,7 @@ enum VPNDrawing {
         }
     }
 
-    enum Icon { case lock, eye }
+    enum Icon { case lock, eye, eyeSlash }
 
     static func icon(_ icon: Icon, in rect: CGRect, color: UInt32, context: CGContext) {
         context.saveGState()
@@ -254,7 +265,7 @@ enum VPNDrawing {
             shackle.addLine(to: CGPoint(x: 12, y: 17))
             context.addPath(shackle)
             context.strokePath()
-        case .eye:
+        case .eye, .eyeSlash:
             path.move(to: CGPoint(x: 2, y: 12))
             path.addCurve(to: CGPoint(x: 12, y: 5), control1: CGPoint(x: 2, y: 12), control2: CGPoint(x: 6, y: 5))
             path.addCurve(to: CGPoint(x: 22, y: 12), control1: CGPoint(x: 18, y: 5), control2: CGPoint(x: 22, y: 12))
@@ -264,14 +275,21 @@ enum VPNDrawing {
             context.addPath(path)
             context.strokePath()
             context.strokeEllipse(in: CGRect(x: 9, y: 9, width: 6, height: 6))
+            if icon == .eyeSlash {
+                let slash = CGMutablePath()
+                slash.move(to: CGPoint(x: 3, y: 3))
+                slash.addLine(to: CGPoint(x: 21, y: 21))
+                context.addPath(slash)
+                context.strokePath()
+            }
         }
         context.restoreGState()
     }
 
-    static func emptyPasswordField(in rect: CGRect, focused:Bool = false, palette:ThemePalette = .light, context: CGContext) {
+    static func emptyPasswordField(in rect: CGRect, visible:Bool = false, focused:Bool = false, palette:ThemePalette = .light, context: CGContext) {
         rounded(rect, radius: 9, fill: palette[.surface, light:0xffffff], border: focused ? palette[.focusBorder, light:0xa8afa4] : palette[.border, light:0xe5e9df], in: context)
         icon(.lock, in: CGRect(x: rect.minX+11, y: rect.midY-8, width: 16, height: 16), color: palette[.secondaryText, light:0x839676], context: context)
         rounded(CGRect(x:rect.maxX-37,y:rect.midY-14,width:28,height:28),radius:7,fill:palette[.surface, light:0xffffff],border:palette[.border, light:0xe5e9df],background:false,in:context)
-        icon(.eye, in: CGRect(x: rect.maxX-31, y: rect.midY-8, width: 16, height: 16), color: palette[.secondaryText, light:0x8e9b81], context: context)
+        icon(visible ? .eye : .eyeSlash, in: CGRect(x: rect.maxX-31, y: rect.midY-8, width: 16, height: 16), color: palette[.secondaryText, light:0x8e9b81], context: context)
     }
 }

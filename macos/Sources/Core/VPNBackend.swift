@@ -146,14 +146,25 @@ final class VPNBackend {
         if let username = value.username, !username.isEmpty { profile.username = username }
     }
 
-    func connect(_ id: String, password: String? = nil, remember: Bool = false) throws {
+    func connect(_ id: String, username: String? = nil, password: String? = nil, remember: Bool = false) throws {
         try refresh()
         guard helper.status == "enabled" else { throw AppError("helper_setup", helper.message) }
         guard !active(id) else { throw AppError("already_connected", "This profile is already active.") }
         var profile = try get(id)
         try VPNPolicy.conflict(profile, with: profiles.filter { active($0.id) })
         let content = try store.content(id)
+        if let username {
+            profile.username = try VPNPolicy.username(username, required: profile.authKind == .usernamePassword)
+        }
         try evaluate(&profile, content: content)
+        if profile.authKind == .usernamePassword {
+            guard !profile.username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw AppError("username_required", "Enter a username to connect.")
+            }
+            _ = try VPNPolicy.username(profile.username, required: true)
+        }
+        // Persist a submitted username before asking OpenVPN to authenticate.
+        // `evaluate` may replace it with a configuration-locked username.
         try store.save(profile)
         replace(profile)
         let secret: String
@@ -164,9 +175,6 @@ final class VPNBackend {
         guard profile.authKind == .certificate || !secret.isEmpty else { throw AppError("credentials_required", "Enter your PIN or password.") }
         guard secret.utf8.count <= 4096 else { throw AppError("invalid_input", "Password is too long.") }
         guard !secret.contains("\0") else { throw AppError("invalid_input", "Input contains a null character.") }
-        guard profile.authKind != .usernamePassword || !profile.username.isEmpty else {
-            throw AppError("username_required", "Set the username in profile settings.")
-        }
         let sessionID = UUID().uuidString.lowercased()
         _ = try bridge.request(HelperRequest(op: "connect", profileId: id, sessionId: sessionID,
             profile: profile, content: content, username: profile.username, password: secret))

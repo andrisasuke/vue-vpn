@@ -24,3 +24,13 @@ the application resources. This does not link or embed a WebKit UI/runtime.
 
 Frozen test PNGs were produced from this project's previous UI; they are test
 inputs only and are not bundled with the application.
+
+System Stats adapts CPU, RAM, disk, network, and process reader logic from
+Serhiy Mytrovtsiy's Stats, inspected at clean commit
+`21f866bb3e8ba606c9c01769f558accbcf1fa27c`. The adapted pieces include
+Mach CPU/VM counter arithmetic, IOKit storage-driver statistics, physical-link
+selection, and bounded process command/counter reading. The app does not embed
+Stats' framework, helper, database, settings, or widget architecture. Stats is
+MIT licensed; its full 2019 copyright and permission notice is bundled as
+`macos/Resources/ThirdPartyLicenses/Stats.txt`. No additional code or notices
+from its optional frequency implementation are included.

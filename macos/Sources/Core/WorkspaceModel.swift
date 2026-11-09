@@ -1,7 +1,9 @@
 import Foundation
 import Observation
 
-enum WorkspaceScreen: String, Sendable { case overview, activity, setup }
+enum WorkspaceScreen: String, Sendable { case overview, activity, setup, cpu, ram, ssd, network
+    var statsPage: StatsPage? { StatsPage(rawValue:rawValue) }
+}
 enum WorkspaceModal: Equatable { case credentials(String), settings(String), delete(String) }
 
 @MainActor @Observable
@@ -22,8 +24,10 @@ final class WorkspaceModel {
     private(set) var toast = ""
     var clock = UInt64(Date().timeIntervalSince1970)
     var password = ""
+    var username = ""
     var rememberPassword = false
     var passwordVisible = false
+    private var credentialRecoveryID: String?
     @ObservationIgnored private var pollTask: Task<Void, Never>?
     @ObservationIgnored private var toastTask: Task<Void, Never>?
 
@@ -57,21 +61,47 @@ final class WorkspaceModel {
         switch modal { case .credentials(let value), .settings(let value), .delete(let value): id = value }
         return state.profiles.first { $0.id == id }
     }
+    var credentialsNeedUsername: Bool {
+        modalProfile?.authKind == .usernamePassword &&
+            modalProfile?.username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true
+    }
+    var credentialsNeedPassword: Bool {
+        guard let profile = modalProfile else { return false }
+        return profile.authKind != .certificate && (!profile.remembered || credentialRecoveryID == profile.id)
+    }
 
     func accept(_ snapshot: Snapshot) {
         state = snapshot
         if !state.profiles.contains(where: { $0.id == selectedID }) { selectedID = state.profiles.first?.id ?? "" }
+        if let credentialRecoveryID,
+           !state.profiles.contains(where: { $0.id == credentialRecoveryID && $0.authKind != .certificate }) {
+            self.credentialRecoveryID = nil
+        }
         loaded = true
     }
 
     func openModal(_ modal: WorkspaceModal) {
         guard !busy else { return }
-        self.modal = modal; modalError = ""; password = ""; passwordVisible = false; rememberPassword = false
+        credentialRecoveryID = nil
+        self.modal = modal; modalError = ""; username = ""; password = ""; passwordVisible = false; rememberPassword = false
     }
 
     func closeModal() {
         guard !busy else { return }
-        modal = nil; modalError = ""; password = ""; passwordVisible = false; rememberPassword = false
+        credentialRecoveryID = nil
+        modal = nil; modalError = ""; username = ""; password = ""; passwordVisible = false; rememberPassword = false
+    }
+
+    private func beginCredentialRecovery(_ id: String, fallbackUsername: String? = nil, error: String = "") {
+        let persistedUsername = state.profiles.first { $0.id == id }?.username
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        credentialRecoveryID = id
+        modal = .credentials(id)
+        modalError = error
+        username = persistedUsername.isEmpty ? (fallbackUsername ?? "") : ""
+        password = ""
+        passwordVisible = false
+        rememberPassword = false
     }
 
     func refresh(credentials: Bool = false) async {
@@ -127,22 +157,42 @@ final class WorkspaceModel {
         guard !busy && !quitting else { return }
         error = ""
         guard state.helper.status == "enabled" else { screen = .setup; return }
-        if profile.authKind != .certificate && !profile.remembered { openModal(.credentials(profile.id)); return }
+        if (profile.authKind == .usernamePassword && profile.username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) ||
+            (profile.authKind != .certificate && !profile.remembered) {
+            openModal(.credentials(profile.id)); return
+        }
         connectingID = profile.id
         defer { connectingID = nil }
-        let result = await perform(.connect(id: profile.id, password: nil, remember: false))
-        if let failure = result?.failure, ["credentials_required", "keychain"].contains(failure.code) {
-            error = ""; openModal(.credentials(profile.id))
+        let result = await perform(.connect(id: profile.id, username: nil, password: nil, remember: false))
+        if let failure = result?.failure {
+            if ["credentials_required", "keychain"].contains(failure.code) {
+                error = ""; beginCredentialRecovery(profile.id, error: failure.message)
+            } else if failure.code == "username_required" {
+                error = ""; openModal(.credentials(profile.id))
+            }
         }
     }
 
     func submitCredentials() async {
-        guard case .credentials(let id) = modal, !busy && !quitting, !password.isEmpty else { return }
-        let secret = password, remember = rememberPassword && modalProfile?.allowPasswordSave == true
-        password = ""; connectingID = id
+        guard case .credentials(let id) = modal, !busy && !quitting else { return }
+        let needsUsername = credentialsNeedUsername, needsPassword = credentialsNeedPassword
+        if needsUsername {
+            do { _ = try VPNPolicy.username(username, required: true) }
+            catch let error as AppError { modalError = error.message; return }
+            catch { modalError = error.localizedDescription; return }
+        }
+        guard !needsPassword || !password.isEmpty else { return }
+        let submittedUsername = needsUsername ? username : nil
+        let secret = needsPassword ? password : nil
+        let remember = rememberPassword && modalProfile?.allowPasswordSave == true
+        username = ""; password = ""; connectingID = id
         defer { connectingID = nil }
-        if let result = await perform(.connect(id: id, password: secret, remember: remember), inModal: true), result.failure == nil {
-            closeModal()
+        if let result = await perform(.connect(id: id, username: submittedUsername, password: secret, remember: remember), inModal: true) {
+            if result.failure == nil {
+                closeModal()
+            } else if let failure = result.failure, ["credentials_required", "keychain"].contains(failure.code) {
+                beginCredentialRecovery(id, fallbackUsername: submittedUsername, error: failure.message)
+            }
         }
     }
 

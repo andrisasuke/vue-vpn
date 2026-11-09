@@ -47,10 +47,16 @@ struct MenuPresentation: Equatable, Sendable {
 /// menu icon. Straight RGBA bytes; AppKit must not reinterpret them as premultiplied.
 enum StatusIcon {
     static let width = 44, height = 36
+    static let connectedGreenRGB: UInt32 = 0x308F4D
+
+    private static func bytes(_ color: UInt32) -> [UInt8] {
+        [UInt8((color >> 16) & 255), UInt8((color >> 8) & 255), UInt8(color & 255)]
+    }
+
     static func rgba(_ indicator: MenuPresentation.Indicator) -> [UInt8] {
         let color: [UInt8]
         switch indicator {
-        case .connected: color = [48, 143, 77]
+        case .connected: color = bytes(connectedGreenRGB)
         case .connecting: color = [176, 140, 61]
         case .disconnected: color = [139, 145, 135]
         }

@@ -100,7 +100,60 @@ final class OffscreenTests: XCTestCase {
                           crop: CGRect(x: 264, y: 330, width: 432, height: 44)) { context in
             context.setFillColor(VPNDrawing.color(0xfafbf8))
             context.fill(CGRect(x: 0, y: 0, width: 432, height: 44))
-            VPNDrawing.emptyPasswordField(in: CGRect(x: 2, y: 2.5, width: 428, height: 40), context: context)
+            VPNDrawing.emptyPasswordField(in: CGRect(x: 2, y: 2.5, width: 428, height: 40), visible: false, context: context)
+        }
+    }
+
+    func testNativeCredentialVisibilityEyeMatchesCurrentState() throws {
+        struct RenderedEye {
+            let bounds: CGRect
+            let width: Int
+            let height: Int
+            let pixels: [UInt8]
+        }
+        func render(visible: Bool, palette: ThemePalette, scale: Int) throws -> RenderedEye {
+            var profile = try ProfileParser.parse("client\nremote vpn.example.test\nauth-user-pass\n", fallbackName: "Synthetic").profile
+            profile.authKind = .pin
+            let credentials = CredentialsScene.make(profile: profile, width: 480, top: 108, busy: false,
+                hasPassword: true, visible: visible, remember: false, error: "", palette: palette)
+            let toggle = try XCTUnwrap(credentials.scene.hits.first { $0.action == .togglePassword })
+            let height = Int(ceil(credentials.bottom + 26))
+            let context = try XCTUnwrap(CGContext(data: nil, width: 480 * scale, height: height * scale,
+                bitsPerComponent: 8, bytesPerRow: 480 * scale * 4,
+                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            context.scaleBy(x: CGFloat(scale), y: CGFloat(scale))
+            context.translateBy(x: 0, y: CGFloat(height)); context.scaleBy(x: 1, y: -1)
+            context.setFillColor(VPNDrawing.color(palette.background)); context.fill(CGRect(x: 0, y: 0, width: 480, height: height))
+            credentials.scene.draw(in: context)
+            let image = NSImage(cgImage: try XCTUnwrap(context.makeImage()), size: CGSize(width: 480, height: height))
+            let bitmap = try bitmap(image)
+            return RenderedEye(bounds: toggle.rect, width: bitmap.width, height: bitmap.height, pixels: bitmap.bytes)
+        }
+
+        for palette in [ThemePalette.light, .dark] {
+            for scale in [1, 2] {
+                let hidden = try render(visible: false, palette: palette, scale: scale)
+                let revealed = try render(visible: true, palette: palette, scale: scale)
+                XCTAssertEqual(hidden.bounds, revealed.bounds)
+                XCTAssertEqual(hidden.width, revealed.width); XCTAssertEqual(hidden.height, revealed.height)
+                var changed = 0, changedOnPrimaryDiagonal = 0, changedOnSecondaryDiagonal = 0
+                let bounds = CGRect(x: hidden.bounds.minX * CGFloat(scale), y: hidden.bounds.minY * CGFloat(scale),
+                    width: hidden.bounds.width * CGFloat(scale), height: hidden.bounds.height * CGFloat(scale))
+                for y in 0..<hidden.height {
+                    for x in 0..<hidden.width {
+                        let offset = (y * hidden.width + x) * 4
+                        guard hidden.pixels[offset..<(offset + 4)] != revealed.pixels[offset..<(offset + 4)] else { continue }
+                        changed += 1
+                        XCTAssertTrue(bounds.contains(CGPoint(x: x, y: y)), "Visibility must not move credential layout")
+                        let localX = x - Int(bounds.minX), localY = y - Int(bounds.minY), side = Int(bounds.width) - 1
+                        if abs(localX - localY) <= 3 * scale { changedOnPrimaryDiagonal += 1 }
+                        if abs(localX + localY - side) <= 3 * scale { changedOnSecondaryDiagonal += 1 }
+                    }
+                }
+                XCTAssertGreaterThan(changed, 12 * scale)
+                XCTAssertGreaterThan(max(changedOnPrimaryDiagonal, changedOnSecondaryDiagonal), 12 * scale,
+                    "Masked credentials must add a diagonal crossed-eye stroke")
+            }
         }
     }
 

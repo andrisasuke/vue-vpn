@@ -32,7 +32,7 @@ final class ProfileEditor {
         }
         var result = draft
         do {
-            guard profile.authKind != .usernamePassword || !result.username.isEmpty else {
+            guard profile.authKind != .usernamePassword || !result.username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw AppError("invalid_username", "Enter a username for this profile.")
             }
             // Hidden DNS is copied from the original. A visible-field edit must

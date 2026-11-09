@@ -12,7 +12,8 @@ final class FakeBridge: VPNBridge {
     var sessions: [Session] = [], calls: [String] = []
     var snapshotError = false, replaceError = false, identityError = false, registrationError = false
     var registrationStatus = "enabled", allowSave = true
-    var saved: [String: String] = [:], connections: [(id: String, password: String)] = []
+    var saved: [String: String] = [:], connections: [(id: String, username: String, password: String)] = []
+    var validatedUsername = ""
     var saveCount = 0, disconnected: [String] = [], cleanupPolls = 0, cleanupError = false
     var disconnecting = false
     var allowVPNOperations = false
@@ -62,11 +63,11 @@ final class FakeBridge: VPNBridge {
             throw AppError("test", "Forbidden fake operation")
         }
         switch request.op {
-        case "validate": return HelperReply(allowPasswordSave: allowSave, username: "")
+        case "validate": return HelperReply(allowPasswordSave: allowSave, username: validatedUsername)
         case "connect":
             XCTAssertFalse(disconnecting, "Must finish cleanup before connecting again")
             let id = try XCTUnwrap(request.profileId), sessionID = try XCTUnwrap(request.sessionId)
-            connections.append((id, request.password ?? ""))
+            connections.append((id, request.username ?? "", request.password ?? ""))
             sessions.removeAll { $0.profileId == id }
             sessions.append(Session(profileId: id, sessionId: sessionID, status: .connecting))
         case "disconnect", "disconnect_all":

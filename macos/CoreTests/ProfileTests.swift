@@ -64,6 +64,9 @@ final class ProfileTests: XCTestCase {
         XCTAssertThrowsError(try VPNPolicy.validate(&update))
         update.name = "Test"; update.username = "one\ntwo"
         XCTAssertThrowsError(try VPNPolicy.validate(&update))
+        XCTAssertThrowsError(try VPNPolicy.username(String(repeating: "u", count: 257), required: true))
+        XCTAssertThrowsError(try VPNPolicy.username(" \t ", required: true))
+        XCTAssertEqual(try VPNPolicy.username(" user ", required: true), " user ")
         update.username = ""; update.routes = [Route(address: IPv4(bits: 0), prefix: 0)]
         XCTAssertThrowsError(try VPNPolicy.validate(&update))
         update.routes = Array(repeating: Route(address: IPv4(bits: 1), prefix: 32), count: 257)

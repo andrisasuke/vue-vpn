@@ -10,6 +10,7 @@ struct ThemePalette: Equatable, Sendable {
         case errorText, errorSurface, errorBorder, warning, shadow, backdrop
         case connection, gradientStart, gradientEnd, networkLine, networkRing, networkGlow
         case overlay, toast, toastText
+        case statsPrimary, statsSecondary, statsTertiary, statsTrack
     }
     var theme: ResolvedTheme
     static let light = ThemePalette(theme: .light)
@@ -48,12 +49,20 @@ struct ThemePalette: Equatable, Sendable {
         case .networkLine: return 0x91b879
         case .networkRing: return 0x719965
         case .networkGlow: return 0x48643b
+        case .statsPrimary: return 0xd8efad
+        case .statsSecondary: return 0x83bda1
+        case .statsTertiary: return 0xe4c28a
+        case .statsTrack: return 0x3f5044
         case .toast: return 0x2d4836
         case .toastText: return 0xe9efe5
         }
     }
+    var statsColors: [UInt32] { [self[.statsPrimary,light:0x25674d],self[.statsSecondary,light:0x4d8070],self[.statsTertiary,light:0x996331],self[.statsTrack,light:0xdde5dc]] }
     var background: UInt32 { self[.background, light: 0xfafbf8] }
     var surface: UInt32 { self[.surface, light: 0xffffff] }
+    var raised: UInt32 { self[.raised, light: 0xeef2e7] }
+    var accent: UInt32 { self[.accent, light: 0x25674d] }
+    var warning: UInt32 { self[.warning, light: 0x996331] }
     var text: UInt32 { self[.text, light: 0x1d332d] }
     var secondaryText: UInt32 { self[.secondaryText, light: 0x77847b] }
     var border: UInt32 { self[.border, light: 0xe5e9df] }

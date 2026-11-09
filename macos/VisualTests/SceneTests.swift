@@ -53,18 +53,28 @@ final class SceneTests:XCTestCase {
 
     func testCredentialsRespectSavePermissionAndPendingConnection() throws {
         var profile = try XCTUnwrap(state().selected)
-        for allowed in [true,false] {
-            profile.allowPasswordSave = allowed
-            for busy in [true,false] {
-                let dialog = CredentialsScene.make(profile:profile,width:480,top:108,busy:busy,
-                    hasPassword:true,visible:false,remember:false,error:"")
-                let remember = dialog.scene.hits.first { $0.action == .toggleRemember }
-                XCTAssertEqual(remember != nil,allowed)
-                if let remember { XCTAssertEqual(remember.enabled,!busy);XCTAssertEqual(remember.role,.checkbox) }
-                let connect = try XCTUnwrap(dialog.scene.hits.first { $0.action == .submitCredentials })
-                XCTAssertEqual(connect.enabled,!busy)
-                XCTAssertEqual(connect.title,busy ? "Connecting…" : "Connect")
-                XCTAssertEqual(dialog.passwordRect.height,38)
+        for kind in [AuthKind.pin, .usernamePassword] {
+            profile.authKind = kind
+            for allowed in [true,false] {
+                profile.allowPasswordSave = allowed
+                for busy in [true,false] {
+                    for hasPassword in [false,true] {
+                        for visible in [false,true] {
+                            let dialog = CredentialsScene.make(profile:profile,width:480,top:108,busy:busy,
+                                hasPassword:hasPassword,visible:visible,remember:false,error:"")
+                            let remember = dialog.scene.hits.first { $0.action == .toggleRemember }
+                            XCTAssertEqual(remember != nil,allowed)
+                            if let remember { XCTAssertEqual(remember.enabled,!busy);XCTAssertEqual(remember.role,.checkbox) }
+                            let toggle = try XCTUnwrap(dialog.scene.hits.first { $0.action == .togglePassword })
+                            XCTAssertEqual(toggle.title, visible ? "Hide password" : "Show password")
+                            XCTAssertEqual(toggle.enabled,!busy)
+                            let connect = try XCTUnwrap(dialog.scene.hits.first { $0.action == .submitCredentials })
+                            XCTAssertEqual(connect.enabled,!busy && hasPassword)
+                            XCTAssertEqual(connect.title,busy ? "Connecting…" : "Connect")
+                            XCTAssertEqual(dialog.passwordRect.height,38)
+                        }
+                    }
+                }
             }
         }
     }
@@ -79,6 +89,37 @@ final class SceneTests:XCTestCase {
         XCTAssertFalse(try XCTUnwrap(error.scene.hits.first { $0.action == .submitCredentials }).enabled)
         XCTAssertEqual(error.scene.hits.first { $0.action == .togglePassword }?.title,"Hide password")
         XCTAssertTrue(error.scene.hits.allSatisfy { $0.rect.maxY <= error.bottom })
+    }
+
+    func testUsernamePasswordCredentialsRequireBothFieldsAndKeepPasswordOnlyBaseline() throws {
+        var profile = try XCTUnwrap(state().selected); profile.authKind = .usernamePassword
+        let first = CredentialsScene.make(profile:profile,width:480,top:108,busy:false,
+            needsUsername:true,hasUsername:false,needsPassword:true,hasPassword:true,visible:false,remember:false,error:"")
+        XCTAssertNotNil(first.usernameRect); XCTAssertGreaterThan(first.passwordRect.minY, first.usernameRect!.maxY)
+        XCTAssertFalse(try XCTUnwrap(first.scene.hits.first { $0.action == .submitCredentials }).enabled)
+        let later = CredentialsScene.make(profile:profile,width:480,top:108,busy:false,
+            needsUsername:false,needsPassword:true,hasPassword:true,visible:false,remember:false,error:"")
+        XCTAssertNil(later.usernameRect); XCTAssertEqual(later.passwordRect.minY, 132)
+        XCTAssertTrue(try XCTUnwrap(later.scene.hits.first { $0.action == .submitCredentials }).enabled)
+    }
+
+    func testUsernameOnlyCredentialsUseNoPasswordToggle() throws {
+        var profile = try XCTUnwrap(state().selected); profile.authKind = .usernamePassword
+        let dialog = CredentialsScene.make(profile:profile,width:480,top:108,busy:false,
+            needsUsername:true,hasUsername:true,needsPassword:false,hasPassword:false,visible:false,remember:false,error:"")
+        XCTAssertNotNil(dialog.usernameRect); XCTAssertTrue(dialog.passwordRect.isEmpty)
+        XCTAssertFalse(dialog.scene.hits.contains { $0.action == .togglePassword })
+        XCTAssertFalse(dialog.scene.hits.contains { $0.action == .toggleRemember })
+        XCTAssertTrue(try XCTUnwrap(dialog.scene.hits.first { $0.action == .submitCredentials }).enabled)
+    }
+
+    func testProfileDialogInitialFocusFollowsModalType() {
+        let id = "synthetic"
+        let available: Set<String> = ["name", "username", "password"]
+        XCTAssertEqual(ProfileDialog.preferredInitialInputKey(for:.credentials(id), available:available), "username")
+        XCTAssertEqual(ProfileDialog.preferredInitialInputKey(for:.credentials(id), available:["name", "password"]), "password")
+        XCTAssertEqual(ProfileDialog.preferredInitialInputKey(for:.settings(id), available:available), "name")
+        XCTAssertEqual(ProfileDialog.preferredInitialInputKey(for:.delete(id), available:available), "username")
     }
 
     func testTextInputUsesCenteredLineHeightWhileEditingAndResizing() {

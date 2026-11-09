@@ -46,5 +46,8 @@ final class EditorTests: XCTestCase {
             let editor = ProfileEditor(profile)
             XCTAssertEqual(editor.validatedUpdate() == nil,kind == .usernamePassword)
         }
+        var usernamePassword = try profile(); usernamePassword.authKind = .usernamePassword
+        let editor = ProfileEditor(usernamePassword); editor.draft.username = " \t "
+        XCTAssertNil(editor.validatedUpdate())
     }
 }

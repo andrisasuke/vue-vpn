@@ -139,13 +139,26 @@ final class ProfileDialog: NSView {
         switch modal {
         case .credentials:
             let credentials = CredentialsScene.make(profile:profile,width:width,top:y,busy:model.busy,
-                hasPassword:!model.password.isEmpty,visible:model.passwordVisible,remember:model.rememberPassword,error:model.modalError,focused:focusedInput == "password",palette:palette)
+                needsUsername:model.credentialsNeedUsername,hasUsername:!model.username.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty,
+                needsPassword:model.credentialsNeedPassword,hasPassword:!model.password.isEmpty,
+                visible:model.passwordVisible,remember:model.rememberPassword,error:model.modalError,
+                focusedUsername:focusedInput == "username",focusedPassword:focusedInput == "password",palette:palette)
             scene.append(credentials.scene)
-            let field = input("password",label:"Password",rect:credentials.passwordRect,value:model.password,
-                              secure:!model.passwordVisible,fontSize:13,maximum:4096,used:&used)
-            field.showPassword(model.passwordVisible)
-            field.changed = { [weak self] value in self?.model.password = value;self?.update() }
-            field.submitted = { [weak self] in self?.perform(.submitCredentials) }
+            if let rect = credentials.usernameRect {
+                let field = input("username",label:"Username",rect:rect,value:model.username,fontSize:13,maximum:256,used:&used)
+                field.changed = { [weak self] value in self?.model.username = value;self?.update() }
+                field.submitted = { [weak self] in
+                    if self?.model.credentialsNeedPassword == true { self?.inputs["password"]?.focus() }
+                    else { self?.perform(.submitCredentials) }
+                }
+            }
+            if model.credentialsNeedPassword {
+                let field = input("password",label:"Password",rect:credentials.passwordRect,value:model.password,
+                                  secure:!model.passwordVisible,fontSize:13,maximum:4096,used:&used)
+                field.showPassword(model.passwordVisible)
+                field.changed = { [weak self] value in self?.model.password = value;self?.update() }
+                field.submitted = { [weak self] in self?.perform(.submitCredentials) }
+            }
             y = credentials.bottom
         case .settings:
             if let editor {
@@ -319,8 +332,17 @@ final class ProfileDialog: NSView {
         default: break
         }
     }
+    static func preferredInitialInputKey(for modal:WorkspaceModal,available:Set<String>) -> String? {
+        let order:[String]
+        switch modal {
+        case .credentials: order = ["username","password"]
+        case .settings: order = ["name","username","password"]
+        case .delete: order = ["username","password","name"]
+        }
+        return order.first { available.contains($0) }
+    }
     func focusInitial() {
-        if let field = inputs["password"] ?? inputs["name"] { field.focus() }
+        if let key = Self.preferredInitialInputKey(for:modal,available:Set(inputs.keys)),let field = inputs[key] { field.focus() }
         else { window?.makeFirstResponder(self) }
     }
     func clearSecrets() { inputs["password"]?.clear() }
