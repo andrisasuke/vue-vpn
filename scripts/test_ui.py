@@ -11,7 +11,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "artifacts/migration"
 PHASES = {
-    "native": (["testNativeHeadingMeetsSimilarityRequirement", "testNativePasswordFieldMeetsSimilarityRequirement"], ["heading", "password"]),
+    "native": (["testNativeHeadingMeetsSimilarityRequirement", "testNativePasswordFieldMeetsSimilarityRequirement", "testNativeCredentialVisibilityEyeMatchesCurrentState"], ["heading", "password"]),
     "panels": (["testNativeConnectionPanelsMeetSimilarityRequirement"], [f"connection-{s}" for s in ["disconnected", "connected", "connecting"]]),
     "chrome": (["testNativeWorkspaceChromeMeetsSimilarityRequirement"], ["sidebar", "header", "footer"]),
     "credentials": (["testNativeCredentialsContentMeetsSimilarityRequirement"], ["credentials"]),

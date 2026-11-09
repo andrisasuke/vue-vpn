@@ -41,7 +41,7 @@ import AppKit
             scene.text(profile.authKind == .pin ? "Profile PIN / password" : "Password",x:26,y:y+12,size:11,weight:550,color:palette[.secondaryText, light:0x6f7d66])
             y += 23
             let rect = CGRect(x:26,y:y,width:inner,height:40)
-            scene.custom { VPNDrawing.emptyPasswordField(in:rect,focused:focusedPassword,palette:palette,context:$0) }
+            scene.custom { VPNDrawing.emptyPasswordField(in:rect,visible:visible,focused:focusedPassword,palette:palette,context:$0) }
             passwordRect = CGRect(x:61,y:y+1,width:inner-80,height:38)
             scene.hits.append(WorkspaceHitRegion(rect:CGRect(x:width-63,y:y+6,width:28,height:28),title:visible ? "Hide password" : "Show password",action:.togglePassword,enabled:!busy))
             y += 54

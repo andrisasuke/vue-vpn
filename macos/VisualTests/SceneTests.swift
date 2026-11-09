@@ -53,18 +53,28 @@ final class SceneTests:XCTestCase {
 
     func testCredentialsRespectSavePermissionAndPendingConnection() throws {
         var profile = try XCTUnwrap(state().selected)
-        for allowed in [true,false] {
-            profile.allowPasswordSave = allowed
-            for busy in [true,false] {
-                let dialog = CredentialsScene.make(profile:profile,width:480,top:108,busy:busy,
-                    hasPassword:true,visible:false,remember:false,error:"")
-                let remember = dialog.scene.hits.first { $0.action == .toggleRemember }
-                XCTAssertEqual(remember != nil,allowed)
-                if let remember { XCTAssertEqual(remember.enabled,!busy);XCTAssertEqual(remember.role,.checkbox) }
-                let connect = try XCTUnwrap(dialog.scene.hits.first { $0.action == .submitCredentials })
-                XCTAssertEqual(connect.enabled,!busy)
-                XCTAssertEqual(connect.title,busy ? "Connecting…" : "Connect")
-                XCTAssertEqual(dialog.passwordRect.height,38)
+        for kind in [AuthKind.pin, .usernamePassword] {
+            profile.authKind = kind
+            for allowed in [true,false] {
+                profile.allowPasswordSave = allowed
+                for busy in [true,false] {
+                    for hasPassword in [false,true] {
+                        for visible in [false,true] {
+                            let dialog = CredentialsScene.make(profile:profile,width:480,top:108,busy:busy,
+                                hasPassword:hasPassword,visible:visible,remember:false,error:"")
+                            let remember = dialog.scene.hits.first { $0.action == .toggleRemember }
+                            XCTAssertEqual(remember != nil,allowed)
+                            if let remember { XCTAssertEqual(remember.enabled,!busy);XCTAssertEqual(remember.role,.checkbox) }
+                            let toggle = try XCTUnwrap(dialog.scene.hits.first { $0.action == .togglePassword })
+                            XCTAssertEqual(toggle.title, visible ? "Hide password" : "Show password")
+                            XCTAssertEqual(toggle.enabled,!busy)
+                            let connect = try XCTUnwrap(dialog.scene.hits.first { $0.action == .submitCredentials })
+                            XCTAssertEqual(connect.enabled,!busy && hasPassword)
+                            XCTAssertEqual(connect.title,busy ? "Connecting…" : "Connect")
+                            XCTAssertEqual(dialog.passwordRect.height,38)
+                        }
+                    }
+                }
             }
         }
     }
